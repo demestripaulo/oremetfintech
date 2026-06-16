@@ -1,0 +1,31 @@
+name = "marketdesk"
+main = "src/index.js"
+compatibility_date = "2024-09-23"
+
+[[durable_objects.bindings]]
+name = "MARKET_HUB"
+class_name = "MarketHub"
+
+[[migrations]]
+tag = "v1"
+new_classes = ["MarketHub"]
+
+[[kv_namespaces]]
+binding = "MARKET_KV"
+id = "REPLACE_WITH_YOUR_KV_NAMESPACE_ID"
+preview_id = "REPLACE_WITH_YOUR_KV_PREVIEW_NAMESPACE_ID"
+
+[triggers]
+crons = ["*/15 * * * *"]
+
+[vars]
+ENVIRONMENT = "production"
+
+# To deploy:
+#   1. wrangler kv:namespace create marketdesk_kv
+#      -> copy the returned "id" into the [[kv_namespaces]] block above
+#   2. wrangler deploy
+#
+# Custom domain:
+#   wrangler.toml supports routes; add e.g.:
+#   routes = [{ pattern = "marketdesk.yourdomain.com/*", custom_domain = true }]
