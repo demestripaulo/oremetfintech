@@ -94,7 +94,7 @@ function calculateConfluence(rsi, macd, volRatio, pattern) {
 }
 
 function buildExplanation({ interval, bias, rsi, macd, volRatio, pattern, atr, confidence }) {
-  const horizonLabel = interval === '15min' ? 'próximos 15 minutos' : 'próxima hora';
+  const horizonLabel = interval === '15min' ? 'os próximos 15 minutos' : 'a próxima hora';
   const biasLabel = bias === 'bullish' ? 'viés de alta' : bias === 'bearish' ? 'viés de baixa' : 'viés neutro/lateral';
   const rsiText = rsi > 70
     ? `RSI em ${round(rsi, 1)} indica sobrecompra, o que pode limitar novas altas.`
@@ -110,5 +110,5 @@ function buildExplanation({ interval, bias, rsi, macd, volRatio, pattern, atr, c
   const patternText = `O último padrão de candlestick identificado foi "${pattern.name}".`;
   const atrText = `A volatilidade média (ATR) recente é de ${round(atr, 2)}, usada como base para o range projetado.`;
 
-  return `Para os ${horizonLabel}, o modelo aponta um ${biasLabel} com confiança de ${round(confidence, 0)}%. ${rsiText} ${macdText} ${volText} ${patternText} ${atrText} Esta é uma estimativa educacional baseada em análise técnica histórica, não uma garantia de movimento futuro.`;
+  return `Para ${horizonLabel}, o modelo aponta um ${biasLabel} com confiança de ${round(confidence, 0)}%. ${rsiText} ${macdText} ${volText} ${patternText} ${atrText} Esta é uma estimativa educacional baseada em análise técnica histórica, não uma garantia de movimento futuro.`;
 }
