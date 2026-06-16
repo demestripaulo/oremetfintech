@@ -32,8 +32,8 @@ new_classes = ["MarketHub"]
 
 [[kv_namespaces]]
 binding = "MARKET_KV"
-id = "REPLACE_WITH_YOUR_KV_NAMESPACE_ID"
-preview_id = "REPLACE_WITH_YOUR_KV_PREVIEW_NAMESPACE_ID"
+id = "03fa9c241ff94cd7b79b92e1bb4a9dda"
+preview_id = "6c9b016631fd4ca5a15fe8d17f089ba6"
 
 [triggers]
 crons = ["*/15 * * * *"]
