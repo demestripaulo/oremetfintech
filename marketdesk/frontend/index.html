@@ -44,6 +44,16 @@
       <h2>Histórico e Log de Análises</h2>
       <div id="history-container"></div>
     </div>
+
+    <div class="card">
+      <h2>Inteligência Externa</h2>
+      <div class="intel-grid" id="intelligence-container"></div>
+    </div>
+
+    <div class="card">
+      <h2>Market Intelligence — Notícias</h2>
+      <div id="news-container"></div>
+    </div>
   </div>
 
   <!-- Coluna 2: indicadores + S/R -->
@@ -57,13 +67,43 @@
       <h2>Suporte &amp; Resistência</h2>
       <div id="sr-container"></div>
     </div>
+
+    <div class="card">
+      <h2>Correlatos BTC (Danelfin)</h2>
+      <div class="danelfin-grid" id="danelfin-container"></div>
+    </div>
   </div>
 
-  <!-- Coluna 3: conectores de decisão + glossário -->
+  <!-- Coluna 3: chat com Claude + conectores de decisão + glossário -->
   <div class="col">
+    <div class="card chat-card">
+      <h2>Chat com Claude AI</h2>
+      <div id="chat-log" class="chat-log"></div>
+      <div id="chat-typing" class="chat-typing">MarketDesk AI está digitando...</div>
+      <div id="chat-chips" class="chat-chips"></div>
+      <div class="chat-input-row">
+        <input id="chat-input" type="text" placeholder="Pergunte sobre o mercado..." />
+        <button id="chat-send">Enviar</button>
+      </div>
+    </div>
+
     <div class="card">
       <h2>Conectores de Decisão</h2>
       <div id="connectors-container"></div>
+    </div>
+
+    <div class="card">
+      <h2>TrendSpider Webhook</h2>
+      <div class="ts-config">
+        <input id="trendspider-url" type="text" placeholder="https://...trendspider webhook URL" />
+        <label class="alert-toggle"><input type="checkbox" id="trendspider-enabled" /> Ativo</label>
+        <div class="ts-buttons">
+          <button id="trendspider-save">Salvar</button>
+          <button id="trendspider-test">Testar conexão</button>
+        </div>
+        <p class="indicator-explain">Configure o TrendSpider em Settings &gt; Webhooks com a URL: <code>{app_url}/webhooks/trendspider</code></p>
+      </div>
+      <div id="trendspider-log"></div>
     </div>
 
     <div class="card">
@@ -96,5 +136,7 @@
 <script src="js/predictions.js"></script>
 <script src="js/chart.js"></script>
 <script src="js/app.js"></script>
+<script src="js/chat.js"></script>
+<script src="js/connectors.js"></script>
 </body>
 </html>

@@ -39,6 +39,8 @@ function showToast(message) {
 }
 
 // ---------- Ticker bar ----------
+window.activeSymbol = activeSymbol;
+
 function renderTickerBar() {
   const bar = $('ticker-bar');
   bar.innerHTML = SYMBOLS.map((sym) => {
@@ -58,6 +60,7 @@ function renderTickerBar() {
   bar.querySelectorAll('.ticker-item').forEach((el) => {
     el.addEventListener('click', () => {
       activeSymbol = el.dataset.symbol;
+      window.activeSymbol = activeSymbol;
       renderTickerBar();
       loadAll();
     });
@@ -160,6 +163,10 @@ function connectWS() {
     try {
       tick = JSON.parse(event.data);
     } catch {
+      return;
+    }
+    if (tick.type === 'system_event' && tick.eventType === 'trendspider') {
+      showToast(tick.notification || 'Alerta TrendSpider recebido');
       return;
     }
     if (tick.type !== 'kline') return;

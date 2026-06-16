@@ -212,6 +212,115 @@ footer.disclaimer {
   border-top: 1px solid var(--border);
 }
 
+/* ---------- Chat ---------- */
+.chat-card { display: flex; flex-direction: column; }
+.chat-log {
+  height: 320px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 8px;
+  padding-right: 4px;
+}
+.chat-msg { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; font-size: 13px; }
+.chat-msg.user { border-left: 2px solid var(--text-secondary); }
+.chat-msg.assistant { border-left: 2px solid var(--bull); }
+.chat-msg-header { display: flex; gap: 8px; align-items: center; font-size: 11px; color: var(--text-secondary); margin-bottom: 4px; }
+.chat-time { margin-left: auto; }
+.chat-msg-body { line-height: 1.5; white-space: pre-wrap; }
+.chat-copy-btn {
+  margin-top: 6px;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  border-radius: 4px;
+  font-size: 11px;
+  padding: 2px 8px;
+  cursor: pointer;
+}
+.chat-typing { display: none; font-size: 12px; color: var(--text-secondary); margin-bottom: 6px; font-style: italic; }
+.chat-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.chat-chip {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 14px;
+  padding: 4px 10px;
+  font-size: 11px;
+  cursor: pointer;
+}
+.chat-chip:hover { border-color: var(--bull); }
+.chat-input-row { display: flex; gap: 6px; }
+.chat-input-row input {
+  flex: 1;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  padding: 8px 10px;
+  font-size: 13px;
+}
+.chat-input-row button {
+  background: var(--bull);
+  color: #06231c;
+  border: none;
+  border-radius: 6px;
+  padding: 8px 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* ---------- Danelfin panel ---------- */
+.danelfin-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+.danelfin-card { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 8px; }
+.danelfin-card .ticker { font-weight: 700; font-size: 13px; margin-bottom: 4px; }
+
+/* ---------- Intelligence panel ---------- */
+.intel-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+.intel-card { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 10px; }
+.intel-label { font-size: 11px; color: var(--text-secondary); text-transform: uppercase; }
+.intel-value { font-size: 18px; font-weight: 700; margin: 4px 0; }
+
+/* ---------- News feed ---------- */
+.news-item { padding: 8px 0; border-bottom: 1px solid var(--border); }
+.news-item:last-child { border-bottom: none; }
+.news-title { font-size: 13px; margin-bottom: 4px; }
+.news-title a { text-decoration: none; }
+.news-title a:hover { text-decoration: underline; }
+.news-meta { display: flex; align-items: center; gap: 8px; }
+.ask-claude-btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  border-radius: 4px;
+  font-size: 11px;
+  padding: 2px 8px;
+  cursor: pointer;
+}
+
+/* ---------- TrendSpider panel ---------- */
+.ts-config { display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; }
+.ts-config input[type="text"] {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  padding: 6px 8px;
+  font-size: 12px;
+}
+.ts-buttons { display: flex; gap: 8px; }
+.ts-buttons button {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.ts-log-item { font-size: 11px; padding: 4px 0; border-bottom: 1px solid var(--border); display: flex; gap: 8px; align-items: flex-start; }
+
 /* ---------- Toast / alert ---------- */
 #toast-container {
   position: fixed;

@@ -19,6 +19,13 @@ export class MarketHub {
   async fetch(request) {
     const upgrade = request.headers.get('Upgrade');
     if (upgrade !== 'websocket') {
+      // Internal channel used by the Worker to push system events
+      // (e.g. TrendSpider webhook notifications) to connected browsers.
+      if (request.method === 'POST') {
+        const payload = await request.json().catch(() => null);
+        if (payload) this.broadcast(payload);
+        return new Response('ok');
+      }
       return new Response('Expected WebSocket', { status: 426 });
     }
 

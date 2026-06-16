@@ -155,3 +155,85 @@ Binance API.
 - Binance REST (`/api/v3/klines`, `/api/v3/ticker/24hr`)
 - CoinGecko (`/coins/{id}/ohlc`) como fallback caso a Binance esteja
   inacessível.
+
+---
+
+## Módulo de IA — Chat com Claude + Conectores Externos
+
+### Chat com Claude (`/api/chat`)
+
+O chat injeta automaticamente um snapshot do mercado (preço, RSI, MACD,
+volume, padrão de candle, S/R, previsões 15min/1h) no `system` prompt a
+cada mensagem, e usa **tool use** para Claude consultar dados em tempo
+real (`get_current_price`, `get_danelfin_score`, `get_fear_greed`,
+`get_price_prediction`, `get_support_resistance`, `get_recent_news`).
+A resposta final é transmitida via SSE (Server-Sent Events), com
+passthrough dos eventos nativos do streaming da Anthropic API
+(`content_block_delta` / `text_delta`).
+
+Variável obrigatória para habilitar o chat:
+
+```
+ANTHROPIC_API_KEY=sk-ant-...
+```
+
+- **Cloudflare:** `wrangler secret put ANTHROPIC_API_KEY`
+- **Oracle:** defina no ambiente do processo (ex.: exportar antes de
+  `pm2 start`, ou editar `oracle/ecosystem.config.cjs`).
+
+### Danelfin (ações correlatas ao BTC)
+
+`GET /api/connectors/danelfin` retorna AI Scores (1–10) para
+MSTR, COIN, MARA, RIOT e IBIT. Requer `DANELFIN_API_KEY` (plano pago em
+danelfin.com/pricing/api). Sem a chave, o painel exibe um aviso por
+ativo em vez de falhar.
+
+### TrendSpider (webhook bidirecional)
+
+TrendSpider não expõe API pública de dados — a integração é via webhook:
+
+- **Receber alertas do TrendSpider:** configure em TrendSpider
+  *Settings > Webhooks* a URL `https://<seu-app>/webhooks/trendspider`.
+  O payload esperado é `{ symbol, alert_type, price, timeframe, message, timestamp }`.
+  Cada evento recebido é logado, notificado em tempo real no dashboard
+  (via WebSocket) e dispara o alerta sonoro/visual configurado.
+- **Enviar alertas para o TrendSpider:** cole a URL do seu webhook de
+  entrada do TrendSpider no painel "TrendSpider Webhook" da UI, ative o
+  toggle e clique em "Testar conexão". O job periódico de 15 minutos
+  envia automaticamente um alerta quando um padrão de candle relevante
+  (não neutro) é detectado.
+
+### Inteligência externa (gratuita)
+
+`GET /api/connectors/intelligence` agrega:
+- **Fear & Greed Index** (alternative.me, gratuito, sem chave).
+- **Sentimento social/dev** (CoinGecko `/coins/bitcoin`, gratuito).
+- **On-chain** (Glassnode — endereços ativos, exchange netflow, SOPR).
+  Requer `GLASSNODE_API_KEY` (tier gratuito em glassnode.com/login);
+  sem a chave, os campos retornam erro individualmente sem quebrar o painel.
+
+`GET /api/connectors/news?asset=bitcoin` agrega notícias das últimas 2h
+de feeds RSS públicos (CoinDesk, Cointelegraph, CryptoNews), filtradas
+por palavras-chave e classificadas localmente como BULLISH/BEARISH/NEUTRO
+por keyword matching. Cada item tem um botão "Perguntar ao Claude" que
+injeta a notícia como contexto no chat.
+
+Messari (`data.messari.io`) está implementado em `connectors.js`
+(`getMessariMetrics`) para uso futuro/manual via tool use — os endpoints
+básicos são gratuitos e não exigem chave.
+
+### Variáveis de ambiente — resumo completo
+
+```
+# Obrigatório para o chat
+ANTHROPIC_API_KEY=sk-ant-...
+
+# Opcionais (funcionalidades extras; degradam graciosamente sem elas)
+DANELFIN_API_KEY=...           # danelfin.com/pricing/api
+GLASSNODE_API_KEY=...          # glassnode.com (free tier)
+MESSARI_API_KEY=...            # messari.io (free, não exigido pelos endpoints básicos)
+CRYPTOQUANT_WEBHOOK_SECRET=...  # reservado para validação de webhooks CryptoQuant
+
+# Configurado pelo usuário via UI (painel TrendSpider), não por env var
+# TRENDSPIDER_WEBHOOK_URL é salvo no KV (Cloudflare) ou em memória (Oracle)
+```

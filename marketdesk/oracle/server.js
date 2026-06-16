@@ -4,17 +4,37 @@ import http from 'http';
 import { buildIndicatorPanel } from './analysis.js';
 import { predictRange } from './predictions.js';
 import { insertPrediction, latestPredictions, resolveDuePredictions } from './db.js';
+import {
+  getDanelfinPanel,
+  getDanelfinScore,
+  getFearGreedIndex,
+  getExternalIntelligence,
+  getMarketNews,
+} from './connectors.js';
+import {
+  setTrendspiderConfig,
+  getTrendspiderConfig,
+  getLog as getTrendspiderLog,
+  sendAlertToTrendspider,
+  testConnection as testTrendspiderConnection,
+  handleInboundWebhook,
+} from './trendspider.js';
+import { buildSystemPrompt, buildSnapshot, resolveToolUse, streamFinalAnswer } from './chat.js';
 
 const PORT = process.env.PORT || 8080;
+const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
+const DANELFIN_API_KEY = process.env.DANELFIN_API_KEY;
+const GLASSNODE_API_KEY = process.env.GLASSNODE_API_KEY;
 const SYMBOLS = ['btcusdt', 'ethusdt', 'solusdt', 'bnbusdt', 'xrpusdt'];
 const BINANCE_REST = 'https://api.binance.com/api/v3';
 const CACHE_TTL_MS = 5000;
 const MIN_REQUEST_INTERVAL_MS = 120;
 
 const app = express();
+app.use(express.json());
 app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', '*');
-  res.header('Access-Control-Allow-Methods', 'GET,OPTIONS');
+  res.header('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
   res.header('Access-Control-Allow-Headers', 'Content-Type');
   next();
 });
@@ -137,11 +157,147 @@ app.get('/api/history', async (req, res) => {
   }
 });
 
+// ---------- External connectors ----------
+app.get('/api/connectors/danelfin', async (req, res) => {
+  const panel = await getDanelfinPanel(DANELFIN_API_KEY);
+  res.json(panel);
+});
+
+app.get('/api/connectors/fear-greed', async (req, res) => {
+  const data = await getFearGreedIndex();
+  res.json(data);
+});
+
+app.get('/api/connectors/intelligence', async (req, res) => {
+  const data = await getExternalIntelligence({ GLASSNODE_API_KEY });
+  res.json(data);
+});
+
+app.get('/api/connectors/news', async (req, res) => {
+  const asset = req.query.asset;
+  const items = await getMarketNews(asset);
+  res.json({ items });
+});
+
+// ---------- TrendSpider webhooks (bidirectional) ----------
+app.post('/webhooks/trendspider', (req, res) => {
+  const result = handleInboundWebhook(req.body || {});
+  broadcastSystemEvent({ eventType: 'trendspider', ...result, payload: req.body });
+  res.json({ received: true });
+});
+
+app.get('/api/trendspider/config', (req, res) => res.json(getTrendspiderConfig()));
+
+app.post('/api/trendspider/config', (req, res) => {
+  const { url, enabled } = req.body || {};
+  res.json(setTrendspiderConfig({ url, enabled }));
+});
+
+app.get('/api/trendspider/log', (req, res) => res.json({ log: getTrendspiderLog() }));
+
+app.post('/api/trendspider/test', async (req, res) => {
+  const result = await testTrendspiderConnection();
+  res.json(result);
+});
+
+// ---------- AI Chat (Claude, streaming with tool use) ----------
+async function buildToolExecutors(defaultSymbol) {
+  return {
+    get_current_price: async ({ symbol } = {}) => {
+      const sym = (symbol || defaultSymbol).toUpperCase();
+      const candles = await fetchKlines(sym, '1m', 200);
+      return { symbol: sym, ...buildIndicatorPanel(candles) };
+    },
+    get_danelfin_score: async ({ ticker }) => getDanelfinScore(ticker, DANELFIN_API_KEY),
+    get_fear_greed: async () => getFearGreedIndex(),
+    get_price_prediction: async ({ interval } = {}) => {
+      const candles = await fetchKlines(defaultSymbol, '1m', 200);
+      return predictRange(candles, interval === '4h' ? '1h' : interval || '15min');
+    },
+    get_support_resistance: async () => {
+      const candles = await fetchKlines(defaultSymbol, '1m', 200);
+      return buildIndicatorPanel(candles).pivots;
+    },
+    get_recent_news: async ({ asset } = {}) => getMarketNews(asset),
+  };
+}
+
+app.post('/api/chat', async (req, res) => {
+  if (!ANTHROPIC_API_KEY) {
+    res.status(500).json({ error: 'ANTHROPIC_API_KEY não configurada no servidor.' });
+    return;
+  }
+  try {
+    const { messages, symbol = 'BTCUSDT' } = req.body || {};
+    const candles = await fetchKlines(symbol, '1m', 200);
+    const indicators = buildIndicatorPanel(candles);
+    const predictions = {
+      fifteenMin: predictRange(candles, '15min'),
+      oneHour: predictRange(candles, '1h'),
+    };
+    const snapshot = buildSnapshot(indicators, predictions, symbol);
+    const system = buildSystemPrompt(snapshot);
+    const toolExecutors = await buildToolExecutors(symbol);
+
+    const { messages: resolvedMessages, toolTrace } = await resolveToolUse({
+      apiKey: ANTHROPIC_API_KEY,
+      system,
+      messages,
+      toolExecutors,
+    });
+
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      Connection: 'keep-alive',
+    });
+    res.write(`event: tool_trace\ndata: ${JSON.stringify(toolTrace)}\n\n`);
+
+    await streamFinalAnswer({
+      apiKey: ANTHROPIC_API_KEY,
+      system,
+      messages: resolvedMessages,
+      onChunk: (line) => res.write(line + '\n'),
+    });
+
+    res.end();
+  } catch (err) {
+    console.error('Chat error', err);
+    if (!res.headersSent) {
+      res.status(502).json({ error: err.message });
+    } else {
+      res.write(`event: error\ndata: ${JSON.stringify({ error: err.message })}\n\n`);
+      res.end();
+    }
+  }
+});
+
+function broadcastSystemEvent(event) {
+  const msg = JSON.stringify({ type: 'system_event', ...event });
+  for (const client of wss.clients) {
+    if (client.readyState === WebSocket.OPEN) client.send(msg);
+  }
+}
+
 // ---------- Periodic analysis (every 15 minutes), mirrors the Cloudflare Cron Trigger ----------
 setInterval(async () => {
   for (const symbol of SYMBOLS) {
+    const sym = symbol.toUpperCase();
     try {
-      await fetch(`http://127.0.0.1:${PORT}/api/predictions?symbol=${symbol.toUpperCase()}`);
+      await fetch(`http://127.0.0.1:${PORT}/api/predictions?symbol=${sym}`);
+      const candles = await fetchKlines(sym, '1m', 200);
+      const indicators = buildIndicatorPanel(candles);
+      if (indicators.pattern.bias !== 'neutral') {
+        await sendAlertToTrendspider({
+          source: 'marketdesk',
+          symbol: sym,
+          alert_type: 'pattern_detected',
+          pattern: indicators.pattern.name,
+          bias: indicators.pattern.bias,
+          price: indicators.price,
+          timestamp: new Date().toISOString(),
+        });
+      }
     } catch (err) {
       console.error('periodic analysis failed for', symbol, err.message);
     }
