@@ -138,6 +138,11 @@ export default {
       return handleChat(request, env);
     }
 
+    // Anything else (/, /css/*, /js/*, ...) is the static frontend bundle.
+    if (env.ASSETS) {
+      return env.ASSETS.fetch(request);
+    }
+
     return json({ error: 'Not found' }, 404);
   },
 

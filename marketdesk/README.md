@@ -50,25 +50,48 @@ npx wrangler deploy
 
 Isso publica o Worker (rotas REST `/api/*`, WebSocket `/ws` via Durable
 Object `MarketHub`, e o Cron Trigger `*/15 * * * *` que recalcula e
-persiste previsões para todos os símbolos).
+persiste previsões para todos os símbolos) **e também o frontend
+estático**, pela mesma URL.
 
-### Servir o frontend junto com o Worker
+### Frontend servido pelo próprio Worker (recomendado)
 
-A forma mais simples é hospedar `frontend/` no Cloudflare Pages:
+`cloudflare/wrangler.toml` já tem um bloco `[assets]` apontando para
+`../frontend` com `run_worker_first = true`: o Worker sempre roda
+primeiro, atende `/api/*`, `/ws` e `/webhooks/*`, e qualquer outra rota
+(`/`, `/css/*`, `/js/*`) cai automaticamente no binding `ASSETS`, que
+serve `frontend/index.html`, `css/` e `js/`. Não é preciso configurar
+`API_BASE`/`WS_URL` manualmente — `frontend/index.html` já usa
+`window.location.origin`, que aponta para o próprio Worker.
+
+Se você acessou a URL do Worker (`https://<projeto>.<conta>.workers.dev`)
+e viu um JSON de erro `{"error":"Not found"}` em vez do app, é porque o
+deploy foi feito **antes** dessa configuração de assets — rode
+`npx wrangler deploy` novamente a partir de `marketdesk/cloudflare/` para
+publicar a versão atual.
+
+Requer wrangler 3.90+ para suportar Static Assets em Workers; se o
+deploy falhar reclamando do bloco `[assets]`, rode
+`npm install -D wrangler@latest` dentro de `marketdesk/cloudflare/`.
+
+### Alternativa: frontend separado no Cloudflare Pages
+
+Se preferir hospedar o frontend em outro domínio/projeto (ex.: Pages),
+ainda é possível:
 
 ```bash
 cd marketdesk/frontend
 npx wrangler pages deploy . --project-name=marketdesk
 ```
 
-⚠️ Importante: aponte o comando para a pasta `frontend/` (que contém
-`index.html`, `css/` e `js/`). Rodar `wrangler pages deploy` sem
-argumento de diretório, ou de dentro de `marketdesk/cloudflare/` (que só
-tem código do Worker, sem HTML/CSS), gera o erro:
+⚠️ Aponte o comando para a pasta `frontend/` (que contém `index.html`,
+`css/` e `js/`). Rodar `wrangler pages deploy` sem argumento de
+diretório, ou de dentro de `marketdesk/cloudflare/` (que só tem código
+do Worker, sem HTML/CSS), gera o erro:
 `Could not detect a directory containing static files`.
 
-Depois do deploy, edite `frontend/index.html` e aponte
-`window.MARKETDESK_CONFIG.API_BASE`/`WS_URL` para a URL do Worker, por exemplo:
+Nesse caso, edite `frontend/index.html` e aponte
+`window.MARKETDESK_CONFIG.API_BASE`/`WS_URL` para a URL do Worker (que
+fica em domínio diferente do Pages), por exemplo:
 
 ```js
 window.MARKETDESK_CONFIG = {
