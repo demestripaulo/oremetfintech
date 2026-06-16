@@ -1,56 +1,76 @@
 // MarketDesk AI chat: builds the market-aware system prompt, exposes the
-// Anthropic tool definitions, runs the tool-use loop (non-streaming calls
-// until Claude is done calling tools), then streams the final answer back
-// to the browser via SSE (passthrough of Anthropic's stream events).
+// tool definitions (OpenAI-style, used by Workers AI function calling), runs
+// the tool-use loop (non-streaming calls until the model stops calling
+// tools), then streams the final answer back to the browser via SSE.
+//
+// Runs on Cloudflare Workers AI (binding `env.AI`) instead of a paid
+// third-party API key, so no ANTHROPIC_API_KEY is required to deploy.
 
-const ANTHROPIC_API = 'https://api.anthropic.com/v1/messages';
-const MODEL = 'claude-sonnet-4-6';
+const MODEL = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
 const MAX_TOOL_ITERATIONS = 3;
 
 export const TOOLS = [
   {
-    name: 'get_current_price',
-    description: 'Retorna preço atual e indicadores técnicos do ativo (RSI, MACD, Bollinger, ATR, volume, padrão de candle).',
-    input_schema: {
-      type: 'object',
-      properties: { symbol: { type: 'string', description: 'ex: BTCUSDT' } },
-      required: ['symbol'],
+    type: 'function',
+    function: {
+      name: 'get_current_price',
+      description: 'Retorna preço atual e indicadores técnicos do ativo (RSI, MACD, Bollinger, ATR, volume, padrão de candle).',
+      parameters: {
+        type: 'object',
+        properties: { symbol: { type: 'string', description: 'ex: BTCUSDT' } },
+        required: ['symbol'],
+      },
     },
   },
   {
-    name: 'get_danelfin_score',
-    description: 'Retorna AI Score Danelfin (1-10) para uma ação correlata ao Bitcoin (ex: MSTR, COIN, MARA, RIOT, IBIT). Não cobre criptomoedas diretamente.',
-    input_schema: {
-      type: 'object',
-      properties: { ticker: { type: 'string', description: 'ex: MSTR, COIN' } },
-      required: ['ticker'],
+    type: 'function',
+    function: {
+      name: 'get_danelfin_score',
+      description: 'Retorna AI Score Danelfin (1-10) para uma ação correlata ao Bitcoin (ex: MSTR, COIN, MARA, RIOT, IBIT). Não cobre criptomoedas diretamente.',
+      parameters: {
+        type: 'object',
+        properties: { ticker: { type: 'string', description: 'ex: MSTR, COIN' } },
+        required: ['ticker'],
+      },
     },
   },
   {
-    name: 'get_fear_greed',
-    description: 'Retorna o índice Fear & Greed atual do mercado cripto (0-100).',
-    input_schema: { type: 'object', properties: {} },
-  },
-  {
-    name: 'get_price_prediction',
-    description: 'Retorna a previsão de range de preço para o intervalo dado.',
-    input_schema: {
-      type: 'object',
-      properties: { interval: { type: 'string', enum: ['15min', '1h', '4h'] } },
-      required: ['interval'],
+    type: 'function',
+    function: {
+      name: 'get_fear_greed',
+      description: 'Retorna o índice Fear & Greed atual do mercado cripto (0-100).',
+      parameters: { type: 'object', properties: {} },
     },
   },
   {
-    name: 'get_support_resistance',
-    description: 'Retorna os níveis de suporte e resistência (pivot points) calculados para o ativo selecionado.',
-    input_schema: { type: 'object', properties: {} },
+    type: 'function',
+    function: {
+      name: 'get_price_prediction',
+      description: 'Retorna a previsão de range de preço para o intervalo dado.',
+      parameters: {
+        type: 'object',
+        properties: { interval: { type: 'string', enum: ['15min', '1h', '4h'] } },
+        required: ['interval'],
+      },
+    },
   },
   {
-    name: 'get_recent_news',
-    description: 'Retorna as últimas notícias relevantes do mercado cripto, com classificação de sentimento.',
-    input_schema: {
-      type: 'object',
-      properties: { asset: { type: 'string', description: 'ex: bitcoin, ethereum (opcional)' } },
+    type: 'function',
+    function: {
+      name: 'get_support_resistance',
+      description: 'Retorna os níveis de suporte e resistência (pivot points) calculados para o ativo selecionado.',
+      parameters: { type: 'object', properties: {} },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'get_recent_news',
+      description: 'Retorna as últimas notícias relevantes do mercado cripto, com classificação de sentimento.',
+      parameters: {
+        type: 'object',
+        properties: { asset: { type: 'string', description: 'ex: bitcoin, ethereum (opcional)' } },
+      },
     },
   },
 ];
@@ -99,77 +119,59 @@ export function buildSnapshot(indicators, predictions, symbol) {
   };
 }
 
-async function callAnthropic(apiKey, body) {
-  const res = await fetch(ANTHROPIC_API, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'anthropic-version': '2023-06-01',
-      'x-api-key': apiKey,
-    },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Anthropic API HTTP ${res.status}: ${text}`);
-  }
-  return res;
-}
-
-// Runs the tool-use loop (non-streaming) and returns the final {system, messages}
+// Runs the tool-use loop (non-streaming) and returns the final {messages}
 // ready for a streaming call, plus the tool-call trace (for debugging/UI highlight hints).
-export async function resolveToolUse({ apiKey, system, messages, toolExecutors }) {
-  let currentMessages = messages.slice();
+export async function resolveToolUse({ ai, system, messages, toolExecutors }) {
+  let currentMessages = [{ role: 'system', content: system }, ...messages];
   const toolTrace = [];
 
   for (let i = 0; i < MAX_TOOL_ITERATIONS; i++) {
-    const res = await callAnthropic(apiKey, {
-      model: MODEL,
-      max_tokens: 1024,
-      system,
+    const result = await ai.run(MODEL, {
       messages: currentMessages,
       tools: TOOLS,
+      max_tokens: 1024,
     });
-    const data = await res.json();
 
-    if (data.stop_reason !== 'tool_use') {
-      return { messages: currentMessages, lastAssistantContent: data.content, toolTrace };
+    const toolCalls = result.tool_calls || [];
+    if (toolCalls.length === 0) {
+      return { messages: currentMessages, lastAssistantContent: result.response, toolTrace };
     }
 
-    const toolUseBlocks = data.content.filter((b) => b.type === 'tool_use');
-    currentMessages.push({ role: 'assistant', content: data.content });
+    currentMessages.push({ role: 'assistant', content: result.response || '', tool_calls: toolCalls });
 
-    const toolResults = [];
-    for (const block of toolUseBlocks) {
-      toolTrace.push({ name: block.name, input: block.input });
-      let result;
+    for (const call of toolCalls) {
+      const input = call.arguments || {};
+      toolTrace.push({ name: call.name, input });
+      let toolResult;
       try {
-        result = await toolExecutors[block.name]?.(block.input || {});
+        toolResult = await toolExecutors[call.name]?.(input);
       } catch (err) {
-        result = { error: err.message };
+        toolResult = { error: err.message };
       }
-      toolResults.push({
-        type: 'tool_result',
-        tool_use_id: block.id,
-        content: JSON.stringify(result ?? { error: 'tool não implementada' }),
+      currentMessages.push({
+        role: 'tool',
+        name: call.name,
+        content: JSON.stringify(toolResult ?? { error: 'tool não implementada' }),
       });
     }
-    currentMessages.push({ role: 'user', content: toolResults });
   }
 
   return { messages: currentMessages, lastAssistantContent: null, toolTrace };
 }
 
-export async function streamFinalAnswer({ apiKey, system, messages, onChunk }) {
-  const res = await callAnthropic(apiKey, {
-    model: MODEL,
+// Streams the final answer from Workers AI and re-emits it through `onChunk`
+// using the same `content_block_delta` / `text_delta` envelope the frontend
+// already parses, so the SSE consumer (frontend/js/chat.js) needs no changes.
+export async function streamFinalAnswer({ ai, system, messages, onChunk }) {
+  const fullMessages = messages[0]?.role === 'system' ? messages : [{ role: 'system', content: system }, ...messages];
+
+  const stream = await ai.run(MODEL, {
+    messages: fullMessages,
     max_tokens: 1024,
-    system,
-    messages,
     stream: true,
   });
 
-  const reader = res.body.getReader();
+  const reader = stream.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
 
@@ -179,8 +181,20 @@ export async function streamFinalAnswer({ apiKey, system, messages, onChunk }) {
     buffer += decoder.decode(value, { stream: true });
     const lines = buffer.split('\n');
     buffer = lines.pop();
+
     for (const line of lines) {
-      onChunk(line);
+      if (!line.startsWith('data: ')) continue;
+      const dataStr = line.slice(6).trim();
+      if (!dataStr || dataStr === '[DONE]') continue;
+      try {
+        const parsed = JSON.parse(dataStr);
+        const text = parsed.response;
+        if (text) {
+          onChunk(`data: ${JSON.stringify({ type: 'content_block_delta', delta: { type: 'text_delta', text } })}`);
+        }
+      } catch {
+        // ignore malformed keepalive chunks
+      }
     }
   }
 }

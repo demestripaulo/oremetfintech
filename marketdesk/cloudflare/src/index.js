@@ -133,7 +133,7 @@ export default {
       return json(await testTrendspiderConnection(env));
     }
 
-    // ---------- AI Chat (Claude, streaming with tool use) ----------
+    // ---------- AI Chat (Workers AI, streaming with tool use) ----------
     if (url.pathname === '/api/chat' && request.method === 'POST') {
       return handleChat(request, env);
     }
@@ -228,8 +228,8 @@ async function buildToolExecutors(env, defaultSymbol) {
 }
 
 async function handleChat(request, env) {
-  if (!env.ANTHROPIC_API_KEY) {
-    return json({ error: 'ANTHROPIC_API_KEY não configurada no Worker.' }, 500);
+  if (!env.AI) {
+    return json({ error: 'Workers AI não está disponível neste Worker (binding "AI" ausente).' }, 500);
   }
   try {
     const { messages, symbol = 'BTCUSDT' } = await request.json();
@@ -244,7 +244,7 @@ async function handleChat(request, env) {
     const toolExecutors = await buildToolExecutors(env, symbol);
 
     const { messages: resolvedMessages, toolTrace } = await resolveToolUse({
-      apiKey: env.ANTHROPIC_API_KEY,
+      ai: env.AI,
       system,
       messages,
       toolExecutors,
@@ -256,7 +256,7 @@ async function handleChat(request, env) {
         controller.enqueue(encoder.encode(`event: tool_trace\ndata: ${JSON.stringify(toolTrace)}\n\n`));
         try {
           await streamFinalAnswer({
-            apiKey: env.ANTHROPIC_API_KEY,
+            ai: env.AI,
             system,
             messages: resolvedMessages,
             onChunk: (line) => controller.enqueue(encoder.encode(line + '\n')),

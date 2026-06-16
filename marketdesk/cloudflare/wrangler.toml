@@ -35,6 +35,12 @@ binding = "MARKET_KV"
 id = "03fa9c241ff94cd7b79b92e1bb4a9dda"
 preview_id = "6c9b016631fd4ca5a15fe8d17f089ba6"
 
+# Cloudflare Workers AI binding — powers /api/chat (Llama 3.3 70B with tool
+# use). Free-tier neuron allowance included on every account, no API key
+# needed; this replaces the previous Anthropic-based chat integration.
+[ai]
+binding = "AI"
+
 [triggers]
 crons = ["*/15 * * * *"]
 
@@ -42,7 +48,6 @@ crons = ["*/15 * * * *"]
 ENVIRONMENT = "production"
 
 # Secrets (do NOT put real values here — use `wrangler secret put <NAME>`):
-#   wrangler secret put ANTHROPIC_API_KEY
 #   wrangler secret put DANELFIN_API_KEY      (optional)
 #   wrangler secret put GLASSNODE_API_KEY     (optional)
 #   wrangler secret put MESSARI_API_KEY       (optional, unused by free endpoints)
@@ -51,8 +56,7 @@ ENVIRONMENT = "production"
 # To deploy:
 #   1. wrangler kv:namespace create marketdesk_kv
 #      -> copy the returned "id" into the [[kv_namespaces]] block above
-#   2. wrangler secret put ANTHROPIC_API_KEY
-#   3. wrangler deploy
+#   2. wrangler deploy
 #
 # Custom domain:
 #   wrangler.toml supports routes; add e.g.:

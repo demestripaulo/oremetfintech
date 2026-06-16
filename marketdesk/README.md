@@ -222,28 +222,41 @@ Binance API.
 
 ---
 
-## Módulo de IA — Chat com Claude + Conectores Externos
+## Módulo de IA — Chat + Conectores Externos
 
-### Chat com Claude (`/api/chat`)
+### Chat com IA (`/api/chat`)
 
 O chat injeta automaticamente um snapshot do mercado (preço, RSI, MACD,
 volume, padrão de candle, S/R, previsões 15min/1h) no `system` prompt a
-cada mensagem, e usa **tool use** para Claude consultar dados em tempo
-real (`get_current_price`, `get_danelfin_score`, `get_fear_greed`,
-`get_price_prediction`, `get_support_resistance`, `get_recent_news`).
-A resposta final é transmitida via SSE (Server-Sent Events), com
-passthrough dos eventos nativos do streaming da Anthropic API
-(`content_block_delta` / `text_delta`).
+cada mensagem, e usa **tool use / function calling** para o modelo
+consultar dados em tempo real (`get_current_price`, `get_danelfin_score`,
+`get_fear_greed`, `get_price_prediction`, `get_support_resistance`,
+`get_recent_news`). A resposta final é transmitida via SSE
+(Server-Sent Events).
 
-Variável obrigatória para habilitar o chat:
+**Cloudflare (padrão, sem custo extra):** usa o binding nativo
+**Workers AI** (`env.AI`, modelo `@cf/meta/llama-3.3-70b-instruct-fp8-fast`
+com function calling), já configurado em `wrangler.toml`:
+
+```toml
+[ai]
+binding = "AI"
+```
+
+Não é preciso nenhuma API key — toda conta Cloudflare tem uma cota
+gratuita de neurônios do Workers AI. Basta `wrangler deploy`.
+
+**Oracle:** o backend Node.js (`oracle/chat.js`) ainda usa a API da
+Anthropic e requer:
 
 ```
 ANTHROPIC_API_KEY=sk-ant-...
 ```
 
-- **Cloudflare:** `wrangler secret put ANTHROPIC_API_KEY`
-- **Oracle:** defina no ambiente do processo (ex.: exportar antes de
-  `pm2 start`, ou editar `oracle/ecosystem.config.cjs`).
+definida no ambiente do processo (ex.: exportar antes de `pm2 start`,
+ou editar `oracle/ecosystem.config.cjs`). Para usar Workers AI também
+no Oracle seria necessário trocar por outra API compatível, já que o
+binding `env.AI` só existe dentro de Cloudflare Workers.
 
 ### Danelfin (ações correlatas ao BTC)
 
@@ -289,8 +302,9 @@ básicos são gratuitos e não exigem chave.
 ### Variáveis de ambiente — resumo completo
 
 ```
-# Obrigatório para o chat
-ANTHROPIC_API_KEY=sk-ant-...
+# Obrigatório para o chat apenas no backend Oracle (Cloudflare usa o
+# binding [ai]/Workers AI nativo, sem necessidade de chave)
+ANTHROPIC_API_KEY=sk-ant-...    # apenas oracle/
 
 # Opcionais (funcionalidades extras; degradam graciosamente sem elas)
 DANELFIN_API_KEY=...           # danelfin.com/pricing/api
