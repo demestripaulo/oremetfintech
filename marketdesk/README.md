@@ -54,9 +54,21 @@ persiste previsões para todos os símbolos).
 
 ### Servir o frontend junto com o Worker
 
-A forma mais simples é hospedar `frontend/` no Cloudflare Pages e apontar
-`window.MARKETDESK_CONFIG.API_BASE`/`WS_URL` (em `frontend/index.html`) para
-a URL do Worker, por exemplo:
+A forma mais simples é hospedar `frontend/` no Cloudflare Pages:
+
+```bash
+cd marketdesk/frontend
+npx wrangler pages deploy . --project-name=marketdesk
+```
+
+⚠️ Importante: aponte o comando para a pasta `frontend/` (que contém
+`index.html`, `css/` e `js/`). Rodar `wrangler pages deploy` sem
+argumento de diretório, ou de dentro de `marketdesk/cloudflare/` (que só
+tem código do Worker, sem HTML/CSS), gera o erro:
+`Could not detect a directory containing static files`.
+
+Depois do deploy, edite `frontend/index.html` e aponte
+`window.MARKETDESK_CONFIG.API_BASE`/`WS_URL` para a URL do Worker, por exemplo:
 
 ```js
 window.MARKETDESK_CONFIG = {
