@@ -1,13 +1,24 @@
-name = "marketdesk"
+# O nome do Worker no Cloudflare deve casar com o nome do projeto
+# conectado no dashboard (Workers Builds via Git) — ajuste se o seu
+# projeto tiver outro nome, ou o CI vai sobrescrever este valor e
+# avisar sobre o "Worker name mismatch" a cada deploy.
+name = "oremetfintech"
 main = "src/index.js"
 compatibility_date = "2024-09-23"
 
-# Serves frontend/ (index.html, css/, js/) directly from this Worker, so a
-# single deployed URL handles both the static app and the /api, /ws,
+# Serves the frontend (index.html, css/, js/) directly from this Worker, so
+# a single deployed URL handles both the static app and the /api, /ws,
 # /webhooks routes below. run_worker_first ensures our fetch() handler
 # always runs first and can fall through to ASSETS for non-API paths.
+#
+# `public/` is a copy of `../frontend` kept INSIDE the cloudflare/ directory
+# on purpose: some CI build environments (Cloudflare Workers Builds with a
+# "Root directory" set to cloudflare/) only have this subtree checked out,
+# so a relative "../frontend" path can silently resolve to zero files
+# ("No files to upload"). Run `npm run sync-assets` after editing
+# ../frontend to keep public/ up to date before deploying.
 [assets]
-directory = "../frontend"
+directory = "public"
 binding = "ASSETS"
 run_worker_first = true
 

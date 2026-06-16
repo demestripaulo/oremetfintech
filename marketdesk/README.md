@@ -40,6 +40,15 @@ npx wrangler kv:namespace create marketdesk_kv
 # (opcional) crie também um preview namespace para `wrangler dev`:
 npx wrangler kv:namespace create marketdesk_kv --preview
 # Copie o "preview_id" para wrangler.toml -> preview_id
+```
+
+⚠️ **O deploy falha com `KV namespace 'REPLACE_WITH_YOUR_KV_NAMESPACE_ID'
+is not valid [code: 10042]` até você substituir esses dois placeholders**
+em `wrangler.toml` pelos IDs reais retornados nos comandos acima — o
+repositório não pode conter o ID da sua conta, então isso é sempre um
+passo manual.
+
+```bash
 
 # 3. Testar localmente
 npx wrangler dev
@@ -56,18 +65,38 @@ estático**, pela mesma URL.
 ### Frontend servido pelo próprio Worker (recomendado)
 
 `cloudflare/wrangler.toml` já tem um bloco `[assets]` apontando para
-`../frontend` com `run_worker_first = true`: o Worker sempre roda
-primeiro, atende `/api/*`, `/ws` e `/webhooks/*`, e qualquer outra rota
-(`/`, `/css/*`, `/js/*`) cai automaticamente no binding `ASSETS`, que
-serve `frontend/index.html`, `css/` e `js/`. Não é preciso configurar
-`API_BASE`/`WS_URL` manualmente — `frontend/index.html` já usa
-`window.location.origin`, que aponta para o próprio Worker.
+`cloudflare/public/` (uma cópia de `../frontend`, ver abaixo) com
+`run_worker_first = true`: o Worker sempre roda primeiro, atende
+`/api/*`, `/ws` e `/webhooks/*`, e qualquer outra rota (`/`, `/css/*`,
+`/js/*`) cai automaticamente no binding `ASSETS`. Não é preciso
+configurar `API_BASE`/`WS_URL` manualmente — `frontend/index.html` já
+usa `window.location.origin`, que aponta para o próprio Worker.
 
-Se você acessou a URL do Worker (`https://<projeto>.<conta>.workers.dev`)
-e viu um JSON de erro `{"error":"Not found"}` em vez do app, é porque o
-deploy foi feito **antes** dessa configuração de assets — rode
-`npx wrangler deploy` novamente a partir de `marketdesk/cloudflare/` para
-publicar a versão atual.
+Se você acessou a URL do Worker e viu um JSON de erro
+`{"error":"Not found"}` em vez do app, é porque o deploy foi feito
+**antes** dessa configuração de assets — rode `npx wrangler deploy`
+novamente a partir de `marketdesk/cloudflare/` para publicar a versão
+atual.
+
+Se o log do deploy mostrar `No files to upload` para os assets (comum
+em builds conectados via Git/Workers Builds, quando o "Root directory"
+configurado no dashboard é `marketdesk/cloudflare/` e portanto
+`../frontend` fica fora do que foi baixado): por isso o diretório de
+assets aponta para `public/`, que é uma cópia committada de
+`../frontend` **dentro** de `cloudflare/`. Depois de editar qualquer
+arquivo em `frontend/`, sincronize antes de commitar:
+
+```bash
+cd marketdesk/cloudflare
+npm run sync-assets   # copia ../frontend -> public/
+git add public
+```
+
+Se o painel do Cloudflare (Workers Builds) mostrar um aviso de
+`Worker name mismatch` (o `name` em `wrangler.toml` não bate com o nome
+do projeto conectado), edite o campo `name` em `wrangler.toml` para o
+nome exato do seu projeto Cloudflare — ele já está como `oremetfintech`
+neste repositório; ajuste se o seu projeto tiver outro nome.
 
 Requer wrangler 3.90+ para suportar Static Assets em Workers; se o
 deploy falhar reclamando do bloco `[assets]`, rode
