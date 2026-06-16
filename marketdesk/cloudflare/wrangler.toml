@@ -28,7 +28,7 @@ class_name = "MarketHub"
 
 [[migrations]]
 tag = "v1"
-new_classes = ["MarketHub"]
+new_sqlite_classes = ["MarketHub"]
 
 [[kv_namespaces]]
 binding = "MARKET_KV"
