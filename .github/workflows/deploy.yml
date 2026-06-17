@@ -1,0 +1,36 @@
+name: Deploy to Cloudflare Workers
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'marketdesk/cloudflare/**'
+      - 'marketdesk/frontend/**'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    name: Deploy Worker
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        working-directory: marketdesk/cloudflare
+        run: npm install
+
+      - name: Sync frontend assets
+        working-directory: marketdesk/cloudflare
+        run: npm run sync-assets
+
+      - name: Deploy to Cloudflare Workers
+        working-directory: marketdesk/cloudflare
+        run: npx wrangler deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
