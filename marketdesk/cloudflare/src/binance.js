@@ -1,16 +1,26 @@
-// Binance REST client with a 5s minimum cache (via in-memory map) and
-// basic rate-limit protection. Falls back Binance → Binance.US → CoinGecko
-// for klines, and Binance → Binance.US → CoinGecko for 24h tickers.
+// Multi-exchange market-data client for Cloudflare Workers.
+//
+// IMPORTANT: Binance geo-/cloud-blocks requests coming from Cloudflare's IP
+// ranges (frequent HTTP 451/403), which is why charts loaded only
+// intermittently. To be reliable from a Worker we try exchanges that do NOT
+// block cloud IPs first (Coinbase, Kraken), then fall back to Binance and
+// CoinGecko. Every source is wrapped so a failure just advances to the next.
+//
+// Note: Coinbase/Kraken quote in USD (not USDT) and don't list BNB; for BNB we
+// rely on Binance/CoinGecko. USD≈USDT so prices are equivalent for charting.
 
 const BINANCE_REST = 'https://api.binance.com/api/v3';
 const BINANCE_US_REST = 'https://api.binance.us/api/v3';
+const COINBASE_REST = 'https://api.exchange.coinbase.com';
+const KRAKEN_REST = 'https://api.kraken.com/0/public';
 const COINGECKO_REST = 'https://api.coingecko.com/api/v3';
+
 const CACHE_TTL_MS = 5000;
-const FETCH_TIMEOUT_MS = 8000; // abort slow upstream calls before CF's 30s wall
+const FETCH_TIMEOUT_MS = 6000; // abort slow upstream calls before CF's wall
 
 const memoryCache = new Map();
 let lastRequestAt = 0;
-const MIN_INTERVAL_MS = 120; // ~8 req/s ceiling, well under Binance limits
+const MIN_INTERVAL_MS = 120;
 
 async function throttledFetch(url) {
   const now = Date.now();
@@ -25,7 +35,7 @@ async function throttledFetch(url) {
   try {
     return await fetch(url, {
       signal: controller.signal,
-      headers: { 'User-Agent': 'MarketDesk/1.0' },
+      headers: { 'User-Agent': 'MarketDesk/1.0', Accept: 'application/json' },
     });
   } finally {
     clearTimeout(timer);
@@ -46,13 +56,28 @@ function cacheSet(key, data) {
   memoryCache.set(key, { data, ts: Date.now() });
 }
 
-const INTERVAL_MAP = {
-  '1m': '1m',
-  '5m': '5m',
-  '15m': '15m',
-  '1h': '1h',
-  '4h': '4h',
-  '1D': '1d',
+// interval token -> per-exchange representation
+const INTERVALS = {
+  '1m': { binance: '1m', coinbaseSec: 60, krakenMin: 1 },
+  '5m': { binance: '5m', coinbaseSec: 300, krakenMin: 5 },
+  '15m': { binance: '15m', coinbaseSec: 900, krakenMin: 15 },
+  '1h': { binance: '1h', coinbaseSec: 3600, krakenMin: 60 },
+  '4h': { binance: '4h', coinbaseSec: 21600, krakenMin: 240 },
+  '1D': { binance: '1d', coinbaseSec: 86400, krakenMin: 1440 },
+};
+
+const COINBASE_PRODUCT = {
+  BTCUSDT: 'BTC-USD',
+  ETHUSDT: 'ETH-USD',
+  SOLUSDT: 'SOL-USD',
+  XRPUSDT: 'XRP-USD',
+};
+
+const KRAKEN_PAIR = {
+  BTCUSDT: 'XBTUSD',
+  ETHUSDT: 'ETHUSD',
+  SOLUSDT: 'SOLUSD',
+  XRPUSDT: 'XRPUSD',
 };
 
 const COIN_ID_MAP = {
@@ -63,42 +88,50 @@ const COIN_ID_MAP = {
   XRPUSDT: 'ripple',
 };
 
+// Lightweight Charts needs strictly ascending, unique timestamps (seconds).
+function normalizeCandles(candles, limit) {
+  const byTime = new Map();
+  for (const c of candles) {
+    if (Number.isFinite(c.time) && Number.isFinite(c.close)) byTime.set(c.time, c);
+  }
+  const sorted = [...byTime.values()].sort((a, b) => a.time - b.time);
+  return sorted.slice(-limit);
+}
+
 export async function fetchKlines(symbol, interval = '1m', limit = 200) {
-  const binanceInterval = INTERVAL_MAP[interval] || interval;
-  const cacheKey = `klines:${symbol}:${binanceInterval}:${limit}`;
+  const sym = symbol.toUpperCase();
+  const spec = INTERVALS[interval] || INTERVALS['1m'];
+  const cacheKey = `klines:${sym}:${interval}:${limit}`;
   const cached = cacheGet(cacheKey);
   if (cached) return cached;
 
-  // Try Binance → Binance.US → CoinGecko, never throw to the caller.
-  for (const baseUrl of [BINANCE_REST, BINANCE_US_REST]) {
+  // Ordered, never-throwing source chain. Reliable-from-Workers first.
+  const sources = [];
+  if (COINBASE_PRODUCT[sym]) sources.push(() => fetchCoinbaseKlines(sym, spec.coinbaseSec, limit));
+  sources.push(() => fetchBinanceKlines(BINANCE_REST, sym, spec.binance, limit));
+  sources.push(() => fetchBinanceKlines(BINANCE_US_REST, sym, spec.binance, limit));
+  if (KRAKEN_PAIR[sym]) sources.push(() => fetchKrakenKlines(sym, spec.krakenMin, limit));
+  sources.push(() => fetchCoinGeckoKlines(sym, limit));
+
+  for (const source of sources) {
     try {
-      const candles = await fetchBinanceKlines(baseUrl, symbol, binanceInterval, limit);
+      const candles = normalizeCandles(await source(), limit);
       if (candles.length > 0) {
         cacheSet(cacheKey, candles);
         return candles;
       }
     } catch {
-      // try next source
+      // advance to next source
     }
   }
 
-  try {
-    const candles = await fetchKlinesCoinGecko(symbol, limit);
-    if (candles.length > 0) {
-      cacheSet(cacheKey, candles);
-      return candles;
-    }
-  } catch {
-    // all sources exhausted
-  }
-
-  throw new Error('Dados de candles indisponíveis (Binance, Binance.US e CoinGecko falharam)');
+  throw new Error('Dados de candles indisponíveis em todas as fontes (Coinbase, Binance, Kraken, CoinGecko)');
 }
 
 async function fetchBinanceKlines(baseUrl, symbol, interval, limit) {
-  const url = `${baseUrl}/klines?symbol=${symbol.toUpperCase()}&interval=${interval}&limit=${limit}`;
+  const url = `${baseUrl}/klines?symbol=${symbol}&interval=${interval}&limit=${limit}`;
   const res = await throttledFetch(url);
-  if (!res.ok) throw new Error(`${baseUrl.includes('binance.us') ? 'Binance.US' : 'Binance'} HTTP ${res.status}`);
+  if (!res.ok) throw new Error(`Binance HTTP ${res.status}`);
   const raw = await res.json();
   return raw.map((k) => ({
     time: Math.floor(k[0] / 1000),
@@ -110,17 +143,51 @@ async function fetchBinanceKlines(baseUrl, symbol, interval, limit) {
   }));
 }
 
-async function fetchKlinesCoinGecko(symbol, limit) {
-  const coinId = COIN_ID_MAP[symbol.toUpperCase()] || 'bitcoin';
-  const cacheKey = `cg:${coinId}`;
-  const cached = cacheGet(cacheKey);
-  if (cached) return cached;
+// Coinbase Exchange: rows are [time(s), low, high, open, close, volume], newest first.
+async function fetchCoinbaseKlines(symbol, granularitySec, limit) {
+  const product = COINBASE_PRODUCT[symbol];
+  const url = `${COINBASE_REST}/products/${product}/candles?granularity=${granularitySec}`;
+  const res = await throttledFetch(url);
+  if (!res.ok) throw new Error(`Coinbase HTTP ${res.status}`);
+  const raw = await res.json();
+  if (!Array.isArray(raw)) throw new Error('Coinbase resposta inválida');
+  return raw.slice(0, limit).map((row) => ({
+    time: row[0],
+    low: row[1],
+    high: row[2],
+    open: row[3],
+    close: row[4],
+    volume: row[5],
+  }));
+}
 
+// Kraken: result has a dynamic pair key; rows are [time, o, h, l, c, vwap, vol, count].
+async function fetchKrakenKlines(symbol, intervalMin, limit) {
+  const pair = KRAKEN_PAIR[symbol];
+  const url = `${KRAKEN_REST}/OHLC?pair=${pair}&interval=${intervalMin}`;
+  const res = await throttledFetch(url);
+  if (!res.ok) throw new Error(`Kraken HTTP ${res.status}`);
+  const data = await res.json();
+  if (data.error && data.error.length) throw new Error(`Kraken: ${data.error.join(',')}`);
+  const key = Object.keys(data.result || {}).find((k) => k !== 'last');
+  const rows = key ? data.result[key] : [];
+  return rows.slice(-limit).map((row) => ({
+    time: row[0],
+    open: parseFloat(row[1]),
+    high: parseFloat(row[2]),
+    low: parseFloat(row[3]),
+    close: parseFloat(row[4]),
+    volume: parseFloat(row[6]),
+  }));
+}
+
+async function fetchCoinGeckoKlines(symbol, limit) {
+  const coinId = COIN_ID_MAP[symbol] || 'bitcoin';
   const url = `${COINGECKO_REST}/coins/${coinId}/ohlc?vs_currency=usd&days=1`;
   const res = await throttledFetch(url);
   if (!res.ok) throw new Error(`CoinGecko HTTP ${res.status}`);
   const raw = await res.json();
-  const candles = raw.slice(-limit).map((row) => ({
+  return raw.map((row) => ({
     time: Math.floor(row[0] / 1000),
     open: row[1],
     high: row[2],
@@ -128,59 +195,78 @@ async function fetchKlinesCoinGecko(symbol, limit) {
     close: row[4],
     volume: 0,
   }));
-  cacheSet(cacheKey, candles);
-  return candles;
 }
 
 export async function fetch24hTicker(symbol) {
-  const cacheKey = `ticker:${symbol}`;
+  const sym = symbol.toUpperCase();
+  const cacheKey = `ticker:${sym}`;
   const cached = cacheGet(cacheKey);
   if (cached) return cached;
 
-  // Try Binance → Binance.US → CoinGecko simple price fallback.
-  for (const baseUrl of [BINANCE_REST, BINANCE_US_REST]) {
+  const sources = [];
+  if (COINBASE_PRODUCT[sym]) sources.push(() => fetchCoinbaseTicker(sym));
+  sources.push(() => fetchBinanceTicker(BINANCE_REST, sym));
+  sources.push(() => fetchBinanceTicker(BINANCE_US_REST, sym));
+  sources.push(() => fetchCoinGeckoTicker(sym));
+
+  for (const source of sources) {
     try {
-      const data = await fetchBinanceTicker(baseUrl, symbol);
-      const out = {
-        symbol: data.symbol,
-        price: parseFloat(data.lastPrice),
-        changePercent: parseFloat(data.priceChangePercent),
-        volume: parseFloat(data.volume),
-      };
-      cacheSet(cacheKey, out);
-      return out;
+      const out = await source();
+      if (out && Number.isFinite(out.price) && out.price > 0) {
+        cacheSet(cacheKey, out);
+        return out;
+      }
     } catch {
-      // try next source
+      // advance to next source
     }
   }
 
-  // CoinGecko simple price fallback for tickers
-  try {
-    const coinId = COIN_ID_MAP[symbol.toUpperCase()] || 'bitcoin';
-    const url = `${COINGECKO_REST}/simple/price?ids=${coinId}&vs_currencies=usd&include_24hr_change=true&include_24hr_vol=true`;
-    const res = await throttledFetch(url);
-    if (!res.ok) throw new Error(`CoinGecko ticker HTTP ${res.status}`);
-    const data = await res.json();
-    const coin = data[coinId];
-    const out = {
-      symbol,
-      price: coin.usd,
-      changePercent: coin.usd_24h_change ?? 0,
-      volume: coin.usd_24h_vol ?? 0,
-    };
-    cacheSet(cacheKey, out);
-    return out;
-  } catch {
-    // return a safe stub so the rest of the app doesn't crash
-    return { symbol, price: 0, changePercent: 0, volume: 0 };
-  }
+  // Never throw: return a safe stub so /api/tickers stays valid JSON.
+  return { symbol: sym, price: 0, changePercent: 0, volume: 0 };
 }
 
 async function fetchBinanceTicker(baseUrl, symbol) {
-  const url = `${baseUrl}/ticker/24hr?symbol=${symbol.toUpperCase()}`;
+  const url = `${baseUrl}/ticker/24hr?symbol=${symbol}`;
   const res = await throttledFetch(url);
-  if (!res.ok) throw new Error(`${baseUrl.includes('binance.us') ? 'Binance.US' : 'Binance'} HTTP ${res.status}`);
-  return res.json();
+  if (!res.ok) throw new Error(`Binance HTTP ${res.status}`);
+  const data = await res.json();
+  return {
+    symbol,
+    price: parseFloat(data.lastPrice),
+    changePercent: parseFloat(data.priceChangePercent),
+    volume: parseFloat(data.volume),
+  };
+}
+
+async function fetchCoinbaseTicker(symbol) {
+  const product = COINBASE_PRODUCT[symbol];
+  const url = `${COINBASE_REST}/products/${product}/stats`;
+  const res = await throttledFetch(url);
+  if (!res.ok) throw new Error(`Coinbase HTTP ${res.status}`);
+  const data = await res.json();
+  const open = parseFloat(data.open);
+  const last = parseFloat(data.last);
+  return {
+    symbol,
+    price: last,
+    changePercent: open ? ((last - open) / open) * 100 : 0,
+    volume: parseFloat(data.volume),
+  };
+}
+
+async function fetchCoinGeckoTicker(symbol) {
+  const coinId = COIN_ID_MAP[symbol] || 'bitcoin';
+  const url = `${COINGECKO_REST}/simple/price?ids=${coinId}&vs_currencies=usd&include_24hr_change=true&include_24hr_vol=true`;
+  const res = await throttledFetch(url);
+  if (!res.ok) throw new Error(`CoinGecko HTTP ${res.status}`);
+  const data = await res.json();
+  const coin = data[coinId] || {};
+  return {
+    symbol,
+    price: coin.usd ?? 0,
+    changePercent: coin.usd_24h_change ?? 0,
+    volume: coin.usd_24h_vol ?? 0,
+  };
 }
 
 export const SYMBOLS = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT'];
