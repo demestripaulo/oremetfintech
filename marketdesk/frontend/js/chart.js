@@ -7,8 +7,7 @@ class MarketChart {
 
     const theme = chartTheme();
     this.chart = LightweightCharts.createChart(this.container, {
-      width: this.container.clientWidth,
-      height: this.container.clientHeight || 420,
+      autoSize: true,
       layout: {
         background: { color: theme.card },
         textColor: theme.text,
@@ -42,9 +41,7 @@ class MarketChart {
     this.ema21Series = addSeriesCompat(this.chart, 'Line', { color: theme.info, lineWidth: 1 });
     this.sma50Series = addSeriesCompat(this.chart, 'Line', { color: theme.goldSoft, lineWidth: 1 });
 
-    window.addEventListener('resize', () => {
-      this.chart.applyOptions({ width: this.container.clientWidth, height: this.container.clientHeight || 420 });
-    });
+    // autoSize:true handles resize automatically in v4+
   }
 
   setCandles(candles) {
