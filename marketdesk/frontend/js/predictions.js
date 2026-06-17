@@ -5,7 +5,10 @@ function biasClass(bias) {
 }
 
 function renderPredictionCard(p) {
-  const label = p.interval === '15min' ? 'Próximos 15 minutos' : 'Próxima hora';
+  let label;
+  if (p.interval === '15min') label = 'Próximos 15 minutos (Kalshi 15-min)';
+  else if (p.interval === '1h') label = 'Próxima hora (Kalshi Hourly)';
+  else label = `Fechamento 17h ET (Kalshi Daily)${p.kalshiTarget ? ' — ' + p.kalshiTarget : ''}`;
   return `
     <div class="card prediction-card ${biasClass(p.bias)}" style="margin-bottom:10px">
       <div class="prediction-header">
@@ -26,7 +29,9 @@ function renderPredictions(data) {
     container.innerHTML = '<p class="indicator-explain">Gerando previsões...</p>';
     return;
   }
-  container.innerHTML = renderPredictionCard(data.fifteenMin) + renderPredictionCard(data.oneHour);
+  const cards = [renderPredictionCard(data.fifteenMin), renderPredictionCard(data.oneHour)];
+  if (data.daily) cards.push(renderPredictionCard(data.daily));
+  container.innerHTML = cards.join('');
 }
 
 function renderHistory(log) {

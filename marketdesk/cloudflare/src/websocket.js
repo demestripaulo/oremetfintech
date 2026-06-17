@@ -1,10 +1,36 @@
-// Durable Object that keeps a single upstream connection to Binance combined
-// streams and fans out ticks to every browser client connected to this Worker.
+// Durable Object that maintains a live upstream WebSocket and fans out ticks
+// to every browser client. Primary source: Coinbase Advanced Trade WebSocket
+// (reliable from Cloudflare IPs). Fallback: Kraken WebSocket.
+// Binance is intentionally excluded — it blocks Cloudflare IP ranges.
 
-const SYMBOLS = ['btcusdt', 'ethusdt', 'solusdt', 'bnbusdt', 'xrpusdt'];
-const STREAM_URL =
-  'wss://stream.binance.com:9443/stream?streams=' +
-  SYMBOLS.map((s) => `${s}@kline_1m`).join('/');
+const COINBASE_WS = 'wss://advanced-trade-ws.coinbase.com';
+const KRAKEN_WS = 'wss://ws.kraken.com';
+
+// Coinbase product IDs for each tracked symbol.
+const COINBASE_PRODUCTS = ['BTC-USD', 'ETH-USD', 'SOL-USD', 'XRP-USD'];
+
+// Kraken pair names (BNB not listed on Kraken).
+const KRAKEN_PAIRS = ['XBT/USD', 'ETH/USD', 'SOL/USD', 'XRP/USD'];
+
+// Map Coinbase product → our standard USDT symbol.
+const COINBASE_TO_SYMBOL = {
+  'BTC-USD': 'BTCUSDT',
+  'ETH-USD': 'ETHUSDT',
+  'SOL-USD': 'SOLUSDT',
+  'XRP-USD': 'XRPUSDT',
+};
+
+// Map Kraken pair name → our standard USDT symbol.
+const KRAKEN_TO_SYMBOL = {
+  'XBT/USD': 'BTCUSDT',
+  'XBTUSD': 'BTCUSDT',
+  'ETH/USD': 'ETHUSDT',
+  'ETHUSD': 'ETHUSDT',
+  'SOL/USD': 'SOLUSDT',
+  'SOLUSD': 'SOLUSDT',
+  'XRP/USD': 'XRPUSDT',
+  'XRPUSD': 'XRPUSDT',
+};
 
 export class MarketHub {
   constructor(state, env) {
@@ -14,13 +40,17 @@ export class MarketHub {
     this.upstream = null;
     this.upstreamReconnectAttempts = 0;
     this.lastTicks = new Map();
+    // 'coinbase' | 'kraken'
+    this.activeSource = 'coinbase';
+    // Accumulate partial candle state per symbol (Coinbase sends trades, not klines).
+    this.partialCandles = new Map();
+    // Bucket start time (floored to 1-minute boundary) per symbol.
+    this.bucketStart = new Map();
   }
 
   async fetch(request) {
     const upgrade = request.headers.get('Upgrade');
     if (upgrade !== 'websocket') {
-      // Internal channel used by the Worker to push system events
-      // (e.g. TrendSpider webhook notifications) to connected browsers.
       if (request.method === 'POST') {
         const payload = await request.json().catch(() => null);
         if (payload) this.broadcast(payload);
@@ -42,36 +72,78 @@ export class MarketHub {
     ws.accept();
     this.clients.add(ws);
 
-    // Send the latest known snapshot immediately so the UI isn't empty.
+    // Send the latest known snapshot so the UI isn't empty on connect.
     for (const tick of this.lastTicks.values()) {
-      ws.send(JSON.stringify(tick));
+      try { ws.send(JSON.stringify(tick)); } catch { /* ignore */ }
     }
 
     ws.addEventListener('close', () => this.clients.delete(ws));
     ws.addEventListener('error', () => this.clients.delete(ws));
-    ws.addEventListener('message', () => {
-      // Clients are passive subscribers; ignore inbound messages besides pings.
-    });
   }
 
   ensureUpstream() {
     if (this.upstream && this.upstream.readyState === WebSocket.OPEN) return;
 
+    if (this.activeSource === 'coinbase') {
+      this.connectCoinbase();
+    } else {
+      this.connectKraken();
+    }
+  }
+
+  connectCoinbase() {
     try {
-      const upstream = new WebSocket(STREAM_URL);
-      this.upstream = upstream;
+      const ws = new WebSocket(COINBASE_WS);
+      this.upstream = ws;
 
-      upstream.addEventListener('open', () => {
+      ws.addEventListener('open', () => {
         this.upstreamReconnectAttempts = 0;
+        ws.send(JSON.stringify({
+          type: 'subscribe',
+          product_ids: COINBASE_PRODUCTS,
+          channel: 'ticker',
+        }));
       });
 
-      upstream.addEventListener('message', (event) => {
-        this.handleUpstreamMessage(event.data);
+      ws.addEventListener('message', (event) => {
+        this.handleCoinbaseMessage(event.data);
       });
 
-      upstream.addEventListener('close', () => this.scheduleReconnect());
-      upstream.addEventListener('error', () => this.scheduleReconnect());
-    } catch (err) {
+      ws.addEventListener('close', () => this.scheduleReconnect());
+      ws.addEventListener('error', () => {
+        // If Coinbase fails repeatedly, fall back to Kraken.
+        if (this.upstreamReconnectAttempts >= 3) {
+          this.activeSource = 'kraken';
+        }
+        this.scheduleReconnect();
+      });
+    } catch {
+      this.activeSource = 'kraken';
+      this.scheduleReconnect();
+    }
+  }
+
+  connectKraken() {
+    try {
+      const ws = new WebSocket(KRAKEN_WS);
+      this.upstream = ws;
+
+      ws.addEventListener('open', () => {
+        this.upstreamReconnectAttempts = 0;
+        ws.send(JSON.stringify({
+          event: 'subscribe',
+          pair: KRAKEN_PAIRS,
+          subscription: { name: 'ticker' },
+        }));
+      });
+
+      ws.addEventListener('message', (event) => {
+        this.handleKrakenMessage(event.data);
+      });
+
+      ws.addEventListener('close', () => this.scheduleReconnect());
+      ws.addEventListener('error', () => this.scheduleReconnect());
+    } catch {
       this.scheduleReconnect();
     }
   }
@@ -82,31 +154,83 @@ export class MarketHub {
     setTimeout(() => this.ensureUpstream(), delay);
   }
 
-  handleUpstreamMessage(raw) {
-    let payload;
-    try {
-      payload = JSON.parse(raw);
-    } catch {
-      return;
+  // Coinbase sends ticker updates: { type:'ticker', product_id, price, open_24h, volume_24h, ... }
+  handleCoinbaseMessage(raw) {
+    let msg;
+    try { msg = JSON.parse(raw); } catch { return; }
+
+    // Coinbase Advanced Trade wraps events in { channel, events: [...] }
+    const events = msg.events || (msg.type === 'ticker' ? [msg] : []);
+    for (const ev of events) {
+      const tickers = ev.tickers || (ev.type === 'ticker' ? [ev] : []);
+      for (const ticker of tickers) {
+        const symbol = COINBASE_TO_SYMBOL[ticker.product_id];
+        if (!symbol || !ticker.price) continue;
+
+        const price = parseFloat(ticker.price);
+        const nowSec = Math.floor(Date.now() / 1000);
+        const bucketSec = nowSec - (nowSec % 60);
+
+        let candle = this.partialCandles.get(symbol);
+        if (!candle || this.bucketStart.get(symbol) !== bucketSec) {
+          // New 1-minute bucket.
+          candle = { time: bucketSec, open: price, high: price, low: price, close: price, volume: 0 };
+          this.bucketStart.set(symbol, bucketSec);
+        } else {
+          candle.high = Math.max(candle.high, price);
+          candle.low = Math.min(candle.low, price);
+          candle.close = price;
+          candle.volume += parseFloat(ticker.volume_24h || 0);
+        }
+        this.partialCandles.set(symbol, candle);
+
+        const tick = {
+          type: 'kline',
+          symbol,
+          interval: '1m',
+          isFinal: false,
+          candle: { ...candle },
+        };
+        this.lastTicks.set(symbol, tick);
+        this.broadcast(tick);
+      }
     }
-    const k = payload.data && payload.data.k;
-    if (!k) return;
+  }
+
+  // Kraken sends ticker as [channelID, { b:[bid,...], a:[ask,...], c:[last,vol], ... }, 'ticker', 'XBT/USD']
+  handleKrakenMessage(raw) {
+    let msg;
+    try { msg = JSON.parse(raw); } catch { return; }
+
+    if (!Array.isArray(msg) || msg.length < 4) return;
+    const data = msg[1];
+    const pairName = msg[3];
+    const symbol = KRAKEN_TO_SYMBOL[pairName];
+    if (!symbol || !data || !data.c) return;
+
+    const price = parseFloat(data.c[0]);
+    const nowSec = Math.floor(Date.now() / 1000);
+    const bucketSec = nowSec - (nowSec % 60);
+
+    let candle = this.partialCandles.get(symbol);
+    if (!candle || this.bucketStart.get(symbol) !== bucketSec) {
+      candle = { time: bucketSec, open: price, high: price, low: price, close: price, volume: 0 };
+      this.bucketStart.set(symbol, bucketSec);
+    } else {
+      candle.high = Math.max(candle.high, price);
+      candle.low = Math.min(candle.low, price);
+      candle.close = price;
+    }
+    this.partialCandles.set(symbol, candle);
 
     const tick = {
       type: 'kline',
-      symbol: k.s,
-      interval: k.i,
-      isFinal: k.x,
-      candle: {
-        time: Math.floor(k.t / 1000),
-        open: parseFloat(k.o),
-        high: parseFloat(k.h),
-        low: parseFloat(k.l),
-        close: parseFloat(k.c),
-        volume: parseFloat(k.v),
-      },
+      symbol,
+      interval: '1m',
+      isFinal: false,
+      candle: { ...candle },
     };
-    this.lastTicks.set(tick.symbol, tick);
+    this.lastTicks.set(symbol, tick);
     this.broadcast(tick);
   }
 

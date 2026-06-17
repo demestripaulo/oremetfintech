@@ -81,7 +81,8 @@ async function handleRequest(request, env) {
     const candles = await fetchKlines(symbol, '1m', 200);
     const fifteenMin = predictRange(candles, '15min');
     const oneHour = predictRange(candles, '1h');
-    const record = { symbol, generatedAt: Date.now(), fifteenMin, oneHour };
+    const daily = predictRange(candles, 'daily');
+    const record = { symbol, generatedAt: Date.now(), fifteenMin, oneHour, daily };
     await persistPredictionLog(env, record);
     return json(record);
   }
@@ -167,11 +168,13 @@ export default {
         const indicators = buildIndicatorPanel(candles);
         const fifteenMin = predictRange(candles, '15min');
         const oneHour = predictRange(candles, '1h');
+        const daily = predictRange(candles, 'daily');
         await persistPredictionLog(env, {
           symbol,
           generatedAt: Date.now(),
           fifteenMin,
           oneHour,
+          daily,
           priceAtGeneration: candles[candles.length - 1].close,
         });
 

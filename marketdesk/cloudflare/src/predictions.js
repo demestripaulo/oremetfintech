@@ -8,13 +8,27 @@ import {
   round,
 } from './analysis.js';
 
-// Computes a probable price range for the given interval ('15min' | '1h')
-// using ATR-based volatility, RSI/MACD momentum, volume confirmation and
-// snapping to nearby support/resistance levels.
+// Computes a probable price range for the given interval:
+//   '15min' — next 15-minute candle (Kalshi 15-min markets)
+//   '1h'    — next 60-minute candle (Kalshi hourly markets)
+//   'daily' — closing price at 5 PM ET today (Kalshi daily BTC markets)
 export function predictRange(candles, interval) {
   const currentPrice = candles[candles.length - 1].close;
   const atr = calculateATR(candles, 14);
-  const volatilityMultiplier = interval === '15min' ? 0.3 : 1.0;
+
+  // How many 1-min ATR units to project forward.
+  let volatilityMultiplier;
+  if (interval === '15min') {
+    volatilityMultiplier = 0.3;
+  } else if (interval === '1h') {
+    volatilityMultiplier = 1.0;
+  } else {
+    // 'daily': number of hours remaining until 5 PM ET, floored at 1.
+    // We inflate ATR proportionally and apply an uncertainty decay so the
+    // range grows sub-linearly (sqrt scaling) over the remaining day.
+    const hoursLeft = hoursUntil5pmET();
+    volatilityMultiplier = Math.sqrt(Math.max(1, hoursLeft)) * 1.5;
+  }
 
   const rsi = calculateRSI(candles, 14);
   const macd = calculateMACD(candles);
@@ -44,7 +58,7 @@ export function predictRange(candles, interval) {
   }
 
   const pattern = detectCandlePattern(candles);
-  const confidence = calculateConfluence(rsi, macd, volRatio, pattern);
+  const confidence = calculateConfluence(rsi, macd, volRatio, pattern, interval);
 
   let bias = 'neutral';
   if (momentumScore > 0.15) bias = 'bullish';
@@ -69,32 +83,60 @@ export function predictRange(candles, interval) {
     bias,
     confidence: round(confidence, 0),
     explanation,
+    kalshiTarget: interval === 'daily' ? kalshi5pmLabel() : null,
   };
 }
 
-function calculateConfluence(rsi, macd, volRatio, pattern) {
+// Returns hours remaining until 5:00 PM US Eastern Time (ET = UTC-5 / UTC-4 DST).
+function hoursUntil5pmET() {
+  const now = new Date();
+  // Approximate ET offset: -5 in EST, -4 in EDT. We use -5 conservatively.
+  const etOffsetHours = -5;
+  const nowET = new Date(now.getTime() + etOffsetHours * 3600 * 1000);
+  const target = new Date(nowET);
+  target.setUTCHours(17, 0, 0, 0); // 5 PM ET expressed as UTC-5
+  if (nowET >= target) {
+    // Past 5 PM — project to tomorrow's 5 PM.
+    target.setUTCDate(target.getUTCDate() + 1);
+  }
+  return (target - nowET) / 3600000;
+}
+
+// Human-readable Kalshi target label: "5PM ET — Tue, Jun 17"
+function kalshi5pmLabel() {
+  const now = new Date();
+  const etOffsetHours = -5;
+  const nowET = new Date(now.getTime() + etOffsetHours * 3600 * 1000);
+  const target = new Date(nowET);
+  target.setUTCHours(17, 0, 0, 0);
+  if (nowET >= target) target.setUTCDate(target.getUTCDate() + 1);
+  return target.toUTCString().replace(' GMT', ' ET').slice(0, -3);
+}
+
+function calculateConfluence(rsi, macd, volRatio, pattern, interval) {
   let score = 50;
-  // RSI extremes add conviction
   if (rsi > 65 || rsi < 35) score += 10;
-  // MACD direction not neutral adds conviction
   if (macd.direction !== 'neutral') score += 10;
-  // Strong histogram magnitude
   if (Math.abs(macd.histogram) > 0) score += Math.min(10, Math.abs(macd.histogram) * 2);
-  // Volume confirmation
   if (volRatio > 1.2) score += 10;
   else if (volRatio < 0.7) score -= 5;
-  // Pattern alignment with macd direction increases confidence
   if (
     (pattern.bias === 'bullish' && macd.direction === 'bullish') ||
     (pattern.bias === 'bearish' && macd.direction === 'bearish')
   ) {
     score += 10;
   }
+  // Daily forecasts carry inherently lower confidence due to longer horizon.
+  if (interval === 'daily') score = Math.max(20, score - 15);
   return Math.max(20, Math.min(95, score));
 }
 
 function buildExplanation({ interval, bias, rsi, macd, volRatio, pattern, atr, confidence }) {
-  const horizonLabel = interval === '15min' ? 'os próximos 15 minutos' : 'a próxima hora';
+  let horizonLabel;
+  if (interval === '15min') horizonLabel = 'os próximos 15 minutos';
+  else if (interval === '1h') horizonLabel = 'a próxima hora';
+  else horizonLabel = `o fechamento de hoje às 17h ET (Kalshi Daily)`;
+
   const biasLabel = bias === 'bullish' ? 'viés de alta' : bias === 'bearish' ? 'viés de baixa' : 'viés neutro/lateral';
   const rsiText = rsi > 70
     ? `RSI em ${round(rsi, 1)} indica sobrecompra, o que pode limitar novas altas.`
@@ -109,6 +151,9 @@ function buildExplanation({ interval, bias, rsi, macd, volRatio, pattern, atr, c
     : 'O volume está dentro da média recente.';
   const patternText = `O último padrão de candlestick identificado foi "${pattern.name}".`;
   const atrText = `A volatilidade média (ATR) recente é de ${round(atr, 2)}, usada como base para o range projetado.`;
+  const dailyNote = interval === 'daily'
+    ? ' Para o mercado diário do Kalshi, o range projeção cresce com o tempo restante até as 17h ET usando escala raiz-quadrada da volatilidade intra-diária.'
+    : '';
 
-  return `Para ${horizonLabel}, o modelo aponta um ${biasLabel} com confiança de ${round(confidence, 0)}%. ${rsiText} ${macdText} ${volText} ${patternText} ${atrText} Esta é uma estimativa educacional baseada em análise técnica histórica, não uma garantia de movimento futuro.`;
+  return `Para ${horizonLabel}, o modelo aponta um ${biasLabel} com confiança de ${round(confidence, 0)}%. ${rsiText} ${macdText} ${volText} ${patternText} ${atrText}${dailyNote} Esta é uma estimativa educacional baseada em análise técnica histórica, não uma garantia de movimento futuro.`;
 }
