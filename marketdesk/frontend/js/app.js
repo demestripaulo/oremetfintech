@@ -13,6 +13,30 @@ let wsReconnectAttempts = 0;
 
 function $(id) { return document.getElementById(id); }
 
+function setPanelMessage(id, message, tone = 'muted') {
+  const container = $(id);
+  if (!container) return;
+  container.innerHTML = `<p class="panel-message ${tone}">${message}</p>`;
+}
+
+function setChartMessage(message, tone = 'muted') {
+  const container = $('chart-container');
+  if (!container) return;
+  let overlay = container.querySelector('.chart-state');
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.className = 'chart-state';
+    container.appendChild(overlay);
+  }
+  overlay.textContent = message;
+  overlay.className = `chart-state ${tone}`;
+}
+
+function clearChartMessage() {
+  const overlay = $('chart-container')?.querySelector('.chart-state');
+  if (overlay) overlay.remove();
+}
+
 // ---------- Toasts / alerts ----------
 function playBeep() {
   try {
@@ -71,6 +95,8 @@ async function fetchTickers() {
   try {
     const res = await fetch(`${API_BASE}/api/tickers`);
     const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    if (!Array.isArray(data.tickers)) throw new Error('API retornou tickers inválidos');
     data.tickers.forEach((t) => {
       tickerState[t.symbol] = { price: t.price, changePercent: t.changePercent };
     });
@@ -82,38 +108,75 @@ async function fetchTickers() {
 
 // ---------- REST loaders ----------
 async function loadCandles() {
-  const res = await fetch(`${API_BASE}/api/candles?symbol=${activeSymbol}&interval=${activeTimeframe}&limit=200`);
-  const data = await res.json();
-  chart.setCandles(data.candles);
-  return data.candles;
+  if (!chart) return [];
+  setChartMessage(`Carregando candles reais de ${activeSymbol}...`);
+  try {
+    const res = await fetch(`${API_BASE}/api/candles?symbol=${activeSymbol}&interval=${activeTimeframe}&limit=200`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    if (!Array.isArray(data.candles) || data.candles.length === 0) {
+      throw new Error('API retornou candles vazios');
+    }
+    chart.setCandles(data.candles);
+    clearChartMessage();
+    return data.candles;
+  } catch (err) {
+    console.error('Failed to load candles', err);
+    setChartMessage(`Não foi possível carregar candles reais agora: ${err.message}`, 'error');
+    return [];
+  }
 }
 
 async function loadAnalysis() {
-  const res = await fetch(`${API_BASE}/api/analysis?symbol=${activeSymbol}`);
-  const data = await res.json();
-  renderIndicators(data.indicators);
-  chart.markSupportResistance(data.indicators.pivots);
-  checkAlerts(data.indicators);
-  return data.indicators;
+  try {
+    const res = await fetch(`${API_BASE}/api/analysis?symbol=${activeSymbol}`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    renderIndicators(data.indicators);
+    chart?.markSupportResistance(data.indicators.pivots);
+    checkAlerts(data.indicators);
+    return data.indicators;
+  } catch (err) {
+    console.error('Failed to load analysis', err);
+    setPanelMessage('indicators-container', `Indicadores indisponíveis: ${err.message}`, 'error');
+    setPanelMessage('sr-container', 'Suporte e resistência indisponíveis até os indicadores carregarem.', 'error');
+    setPanelMessage('connectors-container', 'Conectores de decisão indisponíveis até os indicadores carregarem.', 'error');
+    return null;
+  }
 }
 
 async function loadPredictions() {
-  const res = await fetch(`${API_BASE}/api/predictions?symbol=${activeSymbol}`);
-  const data = await res.json();
-  renderPredictions(data);
+  setPanelMessage('predictions-container', 'Gerando previsões educacionais...');
+  try {
+    const res = await fetch(`${API_BASE}/api/predictions?symbol=${activeSymbol}`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    renderPredictions(data);
+  } catch (err) {
+    console.error('Failed to load predictions', err);
+    setPanelMessage('predictions-container', `Previsões indisponíveis: ${err.message}`, 'error');
+  }
 }
 
 async function loadHistory() {
-  const res = await fetch(`${API_BASE}/api/history?symbol=${activeSymbol}`);
-  const data = await res.json();
-  renderHistory(data.log);
+  try {
+    const res = await fetch(`${API_BASE}/api/history?symbol=${activeSymbol}`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    renderHistory(data.log);
+  } catch (err) {
+    console.error('Failed to load history', err);
+    setPanelMessage('history-container', `Histórico indisponível: ${err.message}`, 'error');
+  }
 }
 
 async function loadAll() {
-  await loadCandles();
-  await loadAnalysis();
-  await loadPredictions();
-  await loadHistory();
+  await Promise.allSettled([
+    loadCandles(),
+    loadAnalysis(),
+    loadPredictions(),
+    loadHistory(),
+  ]);
 }
 
 // ---------- Alerts ----------
@@ -179,7 +242,7 @@ function connectWS() {
     }
 
     if (sym === activeSymbol) {
-      chart.updateLastCandle(tick.candle);
+      chart?.updateLastCandle(tick.candle);
     }
   });
 
@@ -196,7 +259,13 @@ function scheduleWsReconnect() {
 
 // ---------- Init ----------
 document.addEventListener('DOMContentLoaded', () => {
-  chart = new MarketChart('chart-container');
+  setChartMessage('Inicializando gráfico...');
+  try {
+    chart = new MarketChart('chart-container');
+  } catch (err) {
+    console.error('Failed to initialize chart', err);
+    setChartMessage(`Gráfico indisponível: ${err.message}`, 'error');
+  }
 
   document.querySelectorAll('.tf-btn').forEach((btn) => {
     btn.addEventListener('click', () => {

@@ -17,7 +17,7 @@ function cached(key, ttlMs, fn) {
 export const BTC_CORRELATED_STOCKS = ['MSTR', 'COIN', 'MARA', 'RIOT', 'IBIT'];
 
 export async function getDanelfinScore(ticker, apiKey) {
-  if (!apiKey) return { ticker, error: 'DANELFIN_API_KEY não configurada' };
+  if (!apiKey) return { ticker, unavailable: true, error: 'DANELFIN_API_KEY não configurada' };
   return cached(`danelfin:${ticker}`, 60 * 60 * 1000, async () => {
     try {
       const res = await fetch(`https://apirest.danelfin.com/ranking?ticker=${ticker}`, {
@@ -41,8 +41,26 @@ export async function getDanelfinScore(ticker, apiKey) {
 }
 
 export async function getDanelfinPanel(apiKey) {
+  if (!apiKey) {
+    return {
+      configured: false,
+      tickers: BTC_CORRELATED_STOCKS,
+      scores: BTC_CORRELATED_STOCKS.map((ticker) => ({
+        ticker,
+        unavailable: true,
+        error: 'DANELFIN_API_KEY não configurada',
+      })),
+      message: 'Danelfin API key não configurada. Os correlatos BTC serão exibidos quando a chave for adicionada ao Worker.',
+      note: 'Tickers correlatos esperados: MSTR, COIN, MARA, RIOT, IBIT. Nenhum score foi estimado.',
+    };
+  }
   const scores = await Promise.all(BTC_CORRELATED_STOCKS.map((t) => getDanelfinScore(t, apiKey)));
-  return { scores, note: 'Dados de ações correlatas via Danelfin AI. Scores são para ações, não para BTC diretamente.' };
+  return {
+    configured: true,
+    tickers: BTC_CORRELATED_STOCKS,
+    scores,
+    note: 'Dados de ações correlatas via Danelfin AI. Scores são para ações, não para BTC diretamente.',
+  };
 }
 
 export async function getFearGreedIndex() {

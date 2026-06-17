@@ -2,6 +2,7 @@
 // and basic rate-limit protection.
 
 const BINANCE_REST = 'https://api.binance.com/api/v3';
+const BINANCE_US_REST = 'https://api.binance.us/api/v3';
 const COINGECKO_REST = 'https://api.coingecko.com/api/v3';
 const CACHE_TTL_MS = 5000;
 
@@ -49,23 +50,33 @@ export async function fetchKlines(symbol, interval = '1m', limit = 200) {
   if (cached) return cached;
 
   try {
-    const url = `${BINANCE_REST}/klines?symbol=${symbol.toUpperCase()}&interval=${binanceInterval}&limit=${limit}`;
-    const res = await throttledFetch(url);
-    if (!res.ok) throw new Error(`Binance HTTP ${res.status}`);
-    const raw = await res.json();
-    const candles = raw.map((k) => ({
-      time: Math.floor(k[0] / 1000),
-      open: parseFloat(k[1]),
-      high: parseFloat(k[2]),
-      low: parseFloat(k[3]),
-      close: parseFloat(k[4]),
-      volume: parseFloat(k[5]),
-    }));
+    const candles = await fetchBinanceKlines(BINANCE_REST, symbol, binanceInterval, limit);
     cacheSet(cacheKey, candles);
     return candles;
-  } catch (err) {
-    return fetchKlinesFallback(symbol, limit);
+  } catch (binanceErr) {
+    try {
+      const candles = await fetchBinanceKlines(BINANCE_US_REST, symbol, binanceInterval, limit);
+      cacheSet(cacheKey, candles);
+      return candles;
+    } catch (binanceUsErr) {
+      return fetchKlinesFallback(symbol, limit);
+    }
   }
+}
+
+async function fetchBinanceKlines(baseUrl, symbol, interval, limit) {
+  const url = `${baseUrl}/klines?symbol=${symbol.toUpperCase()}&interval=${interval}&limit=${limit}`;
+  const res = await throttledFetch(url);
+  if (!res.ok) throw new Error(`${baseUrl.includes('binance.us') ? 'Binance.US' : 'Binance'} HTTP ${res.status}`);
+  const raw = await res.json();
+  return raw.map((k) => ({
+    time: Math.floor(k[0] / 1000),
+    open: parseFloat(k[1]),
+    high: parseFloat(k[2]),
+    low: parseFloat(k[3]),
+    close: parseFloat(k[4]),
+    volume: parseFloat(k[5]),
+  }));
 }
 
 // CoinGecko fallback: lower resolution (daily/hourly OHLC), used only if Binance is unreachable.
@@ -102,10 +113,12 @@ export async function fetch24hTicker(symbol) {
   const cacheKey = `ticker:${symbol}`;
   const cached = cacheGet(cacheKey);
   if (cached) return cached;
-  const url = `${BINANCE_REST}/ticker/24hr?symbol=${symbol.toUpperCase()}`;
-  const res = await throttledFetch(url);
-  if (!res.ok) throw new Error(`Binance HTTP ${res.status}`);
-  const data = await res.json();
+  let data;
+  try {
+    data = await fetchBinanceTicker(BINANCE_REST, symbol);
+  } catch (binanceErr) {
+    data = await fetchBinanceTicker(BINANCE_US_REST, symbol);
+  }
   const out = {
     symbol: data.symbol,
     price: parseFloat(data.lastPrice),
@@ -114,6 +127,13 @@ export async function fetch24hTicker(symbol) {
   };
   cacheSet(cacheKey, out);
   return out;
+}
+
+async function fetchBinanceTicker(baseUrl, symbol) {
+  const url = `${baseUrl}/ticker/24hr?symbol=${symbol.toUpperCase()}`;
+  const res = await throttledFetch(url);
+  if (!res.ok) throw new Error(`${baseUrl.includes('binance.us') ? 'Binance.US' : 'Binance'} HTTP ${res.status}`);
+  return res.json();
 }
 
 export const SYMBOLS = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT'];

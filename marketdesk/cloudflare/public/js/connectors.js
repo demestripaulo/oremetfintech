@@ -9,12 +9,34 @@ function biasBadge(score) {
 
 async function loadDanelfinPanel() {
   const container = document.getElementById('danelfin-container');
+  container.innerHTML = '<p class="panel-message">Verificando correlatos BTC...</p>';
   try {
     const res = await fetch(`${CONNECTORS_API_BASE}/api/connectors/danelfin`);
     const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    if (data.configured === false) {
+      const tickers = data.tickers || ['MSTR', 'COIN', 'MARA', 'RIOT', 'IBIT'];
+      container.innerHTML = `
+        <div class="connector-notice">
+          <div class="notice-title">Configuração pendente</div>
+          <div class="indicator-explain">${data.message || 'Danelfin API key não configurada. Os correlatos BTC serão exibidos quando a chave for adicionada ao Worker.'}</div>
+        </div>
+        <div class="ticker-chip-row">
+          ${tickers.map((ticker) => `<span class="ticker-chip">${ticker}</span>`).join('')}
+        </div>
+        <p class="indicator-explain">${data.note || 'Nenhum score foi estimado.'}</p>
+      `;
+      return;
+    }
+
+    if (!Array.isArray(data.scores) || data.scores.length === 0) {
+      container.innerHTML = '<p class="panel-message">Nenhum correlato BTC disponível no momento.</p>';
+      return;
+    }
+
     container.innerHTML = data.scores.map((s) => {
       if (s.error) {
-        return `<div class="danelfin-card"><div class="ticker">${s.ticker}</div><div class="indicator-explain">${s.error}</div></div>`;
+        return `<div class="danelfin-card muted"><div class="ticker">${s.ticker}</div><div class="indicator-explain">${s.error}</div></div>`;
       }
       const pct = (s.aiScore / 10) * 100;
       return `
@@ -32,7 +54,7 @@ async function loadDanelfinPanel() {
     note.textContent = data.note;
     container.appendChild(note);
   } catch (err) {
-    container.innerHTML = `<p class="indicator-explain">Painel Danelfin indisponível: ${err.message}</p>`;
+    container.innerHTML = `<p class="panel-message error">Painel Danelfin indisponível: ${err.message}</p>`;
   }
 }
 
@@ -86,7 +108,7 @@ async function loadNewsFeed() {
         <div class="news-title"><a href="${item.link}" target="_blank" rel="noopener">${item.title}</a></div>
         <div class="news-meta">
           <span class="badge ${item.sentiment === 'BULLISH' ? 'buy' : item.sentiment === 'BEARISH' ? 'sell' : 'neutral'}">${item.sentiment}</span>
-          <button class="ask-claude-btn" data-idx="${i}">Perguntar ao Claude</button>
+          <button class="ask-claude-btn" data-idx="${i}">Perguntar à IA</button>
         </div>
       </div>
     `).join('');

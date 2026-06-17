@@ -1,41 +1,49 @@
 class MarketChart {
   constructor(containerId) {
     this.container = document.getElementById(containerId);
+    if (!window.LightweightCharts) {
+      throw new Error('Biblioteca Lightweight Charts não carregada');
+    }
+
+    const theme = chartTheme();
     this.chart = LightweightCharts.createChart(this.container, {
+      width: this.container.clientWidth,
+      height: this.container.clientHeight || 420,
       layout: {
-        background: { color: '#1e1e21' },
-        textColor: '#e8e8ea',
+        background: { color: theme.card },
+        textColor: theme.text,
       },
       grid: {
-        vertLines: { color: 'rgba(255,255,255,0.04)' },
-        horzLines: { color: 'rgba(255,255,255,0.04)' },
+        vertLines: { color: theme.grid },
+        horzLines: { color: theme.grid },
       },
       timeScale: { timeVisible: true, secondsVisible: false },
-      rightPriceScale: { borderColor: 'rgba(255,255,255,0.08)' },
+      rightPriceScale: { borderColor: theme.border },
       crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
     });
 
-    this.candleSeries = this.chart.addCandlestickSeries({
-      upColor: '#00c896',
-      downColor: '#ff4757',
+    this.theme = theme;
+    this.candleSeries = addSeriesCompat(this.chart, 'Candlestick', {
+      upColor: theme.bull,
+      downColor: theme.bear,
       borderVisible: false,
-      wickUpColor: '#00c896',
-      wickDownColor: '#ff4757',
+      wickUpColor: theme.bull,
+      wickDownColor: theme.bear,
     });
 
-    this.volumeSeries = this.chart.addHistogramSeries({
+    this.volumeSeries = addSeriesCompat(this.chart, 'Histogram', {
       priceFormat: { type: 'volume' },
       priceScaleId: '',
       scaleMargins: { top: 0.85, bottom: 0 },
-      color: 'rgba(0,200,150,0.4)',
+      color: theme.bullVolume,
     });
 
-    this.ema9Series = this.chart.addLineSeries({ color: '#f5b942', lineWidth: 1 });
-    this.ema21Series = this.chart.addLineSeries({ color: '#00c8ff', lineWidth: 1 });
-    this.sma50Series = this.chart.addLineSeries({ color: '#a78bfa', lineWidth: 1 });
+    this.ema9Series = addSeriesCompat(this.chart, 'Line', { color: theme.gold, lineWidth: 1 });
+    this.ema21Series = addSeriesCompat(this.chart, 'Line', { color: theme.info, lineWidth: 1 });
+    this.sma50Series = addSeriesCompat(this.chart, 'Line', { color: theme.goldSoft, lineWidth: 1 });
 
     window.addEventListener('resize', () => {
-      this.chart.applyOptions({ width: this.container.clientWidth });
+      this.chart.applyOptions({ width: this.container.clientWidth, height: this.container.clientHeight || 420 });
     });
   }
 
@@ -44,7 +52,7 @@ class MarketChart {
     const volumeData = candles.map((c) => ({
       time: c.time,
       value: c.volume,
-      color: c.close >= c.open ? 'rgba(0,200,150,0.4)' : 'rgba(255,71,87,0.4)',
+      color: c.close >= c.open ? this.theme.bullVolume : this.theme.bearVolume,
     }));
     this.candleSeries.setData(candleData);
     this.volumeSeries.setData(volumeData);
@@ -56,18 +64,19 @@ class MarketChart {
 
   updateLastCandle(candle) {
     this.candleSeries.update({ time: candle.time, open: candle.open, high: candle.high, low: candle.low, close: candle.close });
-    this.volumeSeries.update({ time: candle.time, value: candle.volume, color: candle.close >= candle.open ? 'rgba(0,200,150,0.4)' : 'rgba(255,71,87,0.4)' });
+    this.volumeSeries.update({ time: candle.time, value: candle.volume, color: candle.close >= candle.open ? this.theme.bullVolume : this.theme.bearVolume });
   }
 
   markSupportResistance(pivots) {
-    this.candleSeries.setMarkers([]);
+    if (!pivots) return;
+    if (typeof this.candleSeries.setMarkers === 'function') this.candleSeries.setMarkers([]);
     this.chart.priceScale('right').applyOptions({});
     const lines = [pivots.r2, pivots.r1, pivots.s1, pivots.s2];
     if (this._srLines) this._srLines.forEach((l) => this.candleSeries.removePriceLine(l));
     this._srLines = lines.map((price, i) =>
       this.candleSeries.createPriceLine({
         price,
-        color: i < 2 ? '#ff4757' : '#00c896',
+        color: i < 2 ? this.theme.bear : this.theme.gold,
         lineWidth: 1,
         lineStyle: LightweightCharts.LineStyle.Dashed,
         axisLabelVisible: true,
@@ -75,6 +84,37 @@ class MarketChart {
       })
     );
   }
+}
+
+function chartTheme() {
+  const styles = getComputedStyle(document.documentElement);
+  const css = (name, fallback) => styles.getPropertyValue(name).trim() || fallback;
+  return {
+    card: css('--card', '#102A4C'),
+    text: css('--text', '#F7F4EC'),
+    border: css('--border', 'rgba(212, 175, 55, 0.22)'),
+    grid: css('--chart-grid', 'rgba(243, 230, 179, 0.08)'),
+    bull: css('--bull', '#D4AF37'),
+    bear: css('--bear', '#C94C4C'),
+    gold: css('--gold', '#D4AF37'),
+    goldSoft: css('--gold-soft', '#F3E6B3'),
+    info: css('--info', '#7EA6D9'),
+    bullVolume: css('--bull-volume', 'rgba(212, 175, 55, 0.35)'),
+    bearVolume: css('--bear-volume', 'rgba(201, 76, 76, 0.35)'),
+  };
+}
+
+function addSeriesCompat(chart, kind, options) {
+  if (typeof chart.addSeries === 'function' && LightweightCharts[`${kind}Series`]) {
+    return chart.addSeries(LightweightCharts[`${kind}Series`], options);
+  }
+
+  const legacyMethod = `add${kind}Series`;
+  if (typeof chart[legacyMethod] === 'function') {
+    return chart[legacyMethod](options);
+  }
+
+  throw new Error(`Lightweight Charts não suporta ${kind}Series nesta versão`);
 }
 
 function emaLine(candles, period) {
