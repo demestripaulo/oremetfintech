@@ -9,7 +9,7 @@ function biasBadge(score) {
 
 async function loadDanelfinPanel() {
   const container = document.getElementById('danelfin-container');
-  container.innerHTML = '<p class="panel-message">Verificando correlatos BTC...</p>';
+  container.innerHTML = `<p class="panel-message">${t('loadingBtcCorr')}</p>`;
   try {
     const res = await fetch(`${CONNECTORS_API_BASE}/api/connectors/danelfin`);
     const data = await res.json();
@@ -18,19 +18,19 @@ async function loadDanelfinPanel() {
       const tickers = data.tickers || ['MSTR', 'COIN', 'MARA', 'RIOT', 'IBIT'];
       container.innerHTML = `
         <div class="connector-notice">
-          <div class="notice-title">Configuração pendente</div>
-          <div class="indicator-explain">${data.message || 'Danelfin API key não configurada. Os correlatos BTC serão exibidos quando a chave for adicionada ao Worker.'}</div>
+          <div class="notice-title">${t('danelfinPending')}</div>
+          <div class="indicator-explain">${data.message || t('danelfinMsg')}</div>
         </div>
         <div class="ticker-chip-row">
           ${tickers.map((ticker) => `<span class="ticker-chip">${ticker}</span>`).join('')}
         </div>
-        <p class="indicator-explain">${data.note || 'Nenhum score foi estimado.'}</p>
+        <p class="indicator-explain">${data.note || t('danelfinNoScore')}</p>
       `;
       return;
     }
 
     if (!Array.isArray(data.scores) || data.scores.length === 0) {
-      container.innerHTML = '<p class="panel-message">Nenhum correlato BTC disponível no momento.</p>';
+      container.innerHTML = `<p class="panel-message">${t('danelfinNone')}</p>`;
       return;
     }
 
@@ -54,7 +54,7 @@ async function loadDanelfinPanel() {
     note.textContent = data.note;
     container.appendChild(note);
   } catch (err) {
-    container.innerHTML = `<p class="panel-message error">Painel Danelfin indisponível: ${err.message}</p>`;
+    container.innerHTML = `<p class="panel-message error">${t('danelfinNone')} ${err.message}</p>`;
   }
 }
 
@@ -74,23 +74,23 @@ async function loadIntelligencePanel() {
         <div class="indicator-explain">${fg.classification || fg.error || ''}</div>
       </div>
       <div class="intel-card">
-        <div class="intel-label">Sentimento social</div>
+        <div class="intel-label">${t('socialSentiment')}</div>
         <div class="intel-value mono">${sentiment.sentimentUp != null ? sentiment.sentimentUp.toFixed(0) + '%' : '—'}</div>
-        <div class="indicator-explain">${sentiment.error || 'Votos positivos (CoinGecko)'}</div>
+        <div class="indicator-explain">${sentiment.error || t('sentimentSrc')}</div>
       </div>
       <div class="intel-card">
-        <div class="intel-label">On-chain (Glassnode)</div>
+        <div class="intel-label">${t('onChain')}</div>
         <div class="intel-value mono">${onChain.activeAddresses?.value ?? '—'}</div>
-        <div class="indicator-explain">${onChain.activeAddresses?.error || 'Endereços ativos'}</div>
+        <div class="indicator-explain">${onChain.activeAddresses?.error || t('activeAddresses')}</div>
       </div>
       <div class="intel-card">
-        <div class="intel-label">Exchange netflow</div>
+        <div class="intel-label">${t('exchangeNetflow')}</div>
         <div class="intel-value mono">${onChain.exchangeNetflow?.value != null ? onChain.exchangeNetflow.value.toFixed(2) : '—'}</div>
-        <div class="indicator-explain">${onChain.exchangeNetflow?.error || 'BTC (Glassnode)'}</div>
+        <div class="indicator-explain">${onChain.exchangeNetflow?.error || t('exchangeSrc')}</div>
       </div>
     `;
   } catch (err) {
-    container.innerHTML = `<p class="indicator-explain">Inteligência externa indisponível: ${err.message}</p>`;
+    container.innerHTML = `<p class="indicator-explain">${t('externalUnavailable')}${err.message}</p>`;
   }
 }
 
@@ -100,7 +100,7 @@ async function loadNewsFeed() {
     const res = await fetch(`${CONNECTORS_API_BASE}/api/connectors/news`);
     const data = await res.json();
     if (!data.items || data.items.length === 0) {
-      container.innerHTML = '<p class="indicator-explain">Nenhuma notícia relevante nas últimas 2 horas.</p>';
+      container.innerHTML = `<p class="indicator-explain">${t('noNews')}</p>`;
       return;
     }
     container.innerHTML = data.items.map((item, i) => `
@@ -108,7 +108,7 @@ async function loadNewsFeed() {
         <div class="news-title"><a href="${item.link}" target="_blank" rel="noopener">${item.title}</a></div>
         <div class="news-meta">
           <span class="badge ${item.sentiment === 'BULLISH' ? 'buy' : item.sentiment === 'BEARISH' ? 'sell' : 'neutral'}">${item.sentiment}</span>
-          <button class="ask-claude-btn" data-idx="${i}">Perguntar à IA</button>
+          <button class="ask-claude-btn" data-idx="${i}">${t('chatAskAI')}</button>
         </div>
       </div>
     `).join('');
@@ -116,7 +116,7 @@ async function loadNewsFeed() {
       btn.addEventListener('click', () => askChatAboutNews(data.items[parseInt(btn.dataset.idx, 10)]));
     });
   } catch (err) {
-    container.innerHTML = `<p class="indicator-explain">Feed de notícias indisponível: ${err.message}</p>`;
+    container.innerHTML = `<p class="indicator-explain">${t('newsUnavailable')}${err.message}</p>`;
   }
 }
 
@@ -132,14 +132,15 @@ async function refreshTrendspiderLog() {
   const res = await fetch(`${CONNECTORS_API_BASE}/api/trendspider/log`);
   const data = await res.json();
   const container = document.getElementById('trendspider-log');
+  const locale = window.LANG === 'pt' ? 'pt-BR' : 'en-US';
   if (!data.log || data.log.length === 0) {
-    container.innerHTML = '<p class="indicator-explain">Sem mensagens ainda.</p>';
+    container.innerHTML = `<p class="indicator-explain">${t('tsLogEmpty')}</p>`;
     return;
   }
   container.innerHTML = data.log.slice(0, 10).map((entry) => `
     <div class="ts-log-item">
       <span class="badge ${entry.direction === 'inbound' ? 'neutral' : 'buy'}">${entry.direction}</span>
-      <span class="indicator-explain">${new Date(entry.timestamp).toLocaleTimeString('pt-BR')} — ${JSON.stringify(entry.payload).slice(0, 80)}</span>
+      <span class="indicator-explain">${new Date(entry.timestamp).toLocaleTimeString(locale)} — ${JSON.stringify(entry.payload).slice(0, 80)}</span>
     </div>
   `).join('');
 }
@@ -158,7 +159,7 @@ function initTrendspiderControls() {
   document.getElementById('trendspider-test').addEventListener('click', async () => {
     const res = await fetch(`${CONNECTORS_API_BASE}/api/trendspider/test`, { method: 'POST' });
     const data = await res.json();
-    showToast(data.ok ? 'Conexão TrendSpider OK' : `Falha: ${data.reason || data.status}`);
+    showToast(data.ok ? t('tsTestOk') : `${t('tsTestFail')}${data.reason || data.status}`);
   });
 }
 

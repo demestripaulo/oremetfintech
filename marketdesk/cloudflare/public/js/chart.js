@@ -6,6 +6,8 @@ class MarketChart {
     }
 
     const theme = chartTheme();
+    this.tzOffset = -5 * 3600; // UTC-5
+
     this.chart = LightweightCharts.createChart(this.container, {
       autoSize: true,
       layout: {
@@ -44,24 +46,27 @@ class MarketChart {
     // autoSize:true handles resize automatically in v4+
   }
 
+  _t(utc) { return utc + this.tzOffset; }
+
   setCandles(candles) {
-    const candleData = candles.map((c) => ({ time: c.time, open: c.open, high: c.high, low: c.low, close: c.close }));
+    const candleData = candles.map((c) => ({ time: this._t(c.time), open: c.open, high: c.high, low: c.low, close: c.close }));
     const volumeData = candles.map((c) => ({
-      time: c.time,
+      time: this._t(c.time),
       value: c.volume,
       color: c.close >= c.open ? this.theme.bullVolume : this.theme.bearVolume,
     }));
     this.candleSeries.setData(candleData);
     this.volumeSeries.setData(volumeData);
 
-    this.ema9Series.setData(emaLine(candles, 9));
-    this.ema21Series.setData(emaLine(candles, 21));
-    this.sma50Series.setData(smaLine(candles, 50));
+    this.ema9Series.setData(emaLine(candles, 9, this.tzOffset));
+    this.ema21Series.setData(emaLine(candles, 21, this.tzOffset));
+    this.sma50Series.setData(smaLine(candles, 50, this.tzOffset));
   }
 
   updateLastCandle(candle) {
-    this.candleSeries.update({ time: candle.time, open: candle.open, high: candle.high, low: candle.low, close: candle.close });
-    this.volumeSeries.update({ time: candle.time, value: candle.volume, color: candle.close >= candle.open ? this.theme.bullVolume : this.theme.bearVolume });
+    const t = this._t(candle.time);
+    this.candleSeries.update({ time: t, open: candle.open, high: candle.high, low: candle.low, close: candle.close });
+    this.volumeSeries.update({ time: t, value: candle.volume, color: candle.close >= candle.open ? this.theme.bullVolume : this.theme.bearVolume });
   }
 
   markSupportResistance(pivots) {
@@ -112,24 +117,24 @@ function addSeriesCompat(chart, kind, options) {
   throw new Error(`Lightweight Charts não suporta ${kind}Series nesta versão`);
 }
 
-function emaLine(candles, period) {
+function emaLine(candles, period, tzOffset = 0) {
   const k = 2 / (period + 1);
   let prev;
   const out = [];
   candles.forEach((c, i) => {
     prev = i === 0 ? c.close : c.close * k + prev * (1 - k);
-    out.push({ time: c.time, value: prev });
+    out.push({ time: c.time + tzOffset, value: prev });
   });
   return out;
 }
 
-function smaLine(candles, period) {
+function smaLine(candles, period, tzOffset = 0) {
   const out = [];
   for (let i = 0; i < candles.length; i++) {
     if (i < period - 1) continue;
     const slice = candles.slice(i - period + 1, i + 1);
     const avg = slice.reduce((a, c) => a + c.close, 0) / period;
-    out.push({ time: candles[i].time, value: avg });
+    out.push({ time: candles[i].time + tzOffset, value: avg });
   }
   return out;
 }

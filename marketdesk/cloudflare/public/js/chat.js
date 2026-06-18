@@ -1,35 +1,31 @@
-const QUICK_CHIPS = [
-  'Por que esse movimento?',
-  'Explica o RSI',
-  'Range das próximas 2h',
-  'Padrão atual',
-  'Níveis críticos',
-  'Resumo do dia',
-];
+function quickChips() {
+  return ['chip1', 'chip2', 'chip3', 'chip4', 'chip5', 'chip6'].map((k) => t(k));
+}
 
-let chatHistory = []; // { role: 'user' | 'assistant', content: string }
+let chatHistory = [];
 
 function renderChatChips() {
   const container = document.getElementById('chat-chips');
-  container.innerHTML = QUICK_CHIPS.map((c) => `<button class="chat-chip">${c}</button>`).join('');
+  container.innerHTML = quickChips().map((c) => `<button class="chat-chip">${c}</button>`).join('');
   container.querySelectorAll('.chat-chip').forEach((btn) => {
     btn.addEventListener('click', () => sendChatMessage(btn.textContent));
   });
 }
 
-function appendChatMessage(role, text, { streaming = false } = {}) {
+function appendChatMessage(role, text) {
   const log = document.getElementById('chat-log');
   const el = document.createElement('div');
   el.className = `chat-msg ${role}`;
-  const time = new Date().toLocaleTimeString('pt-BR');
+  const locale = window.LANG === 'pt' ? 'pt-BR' : 'en-US';
+  const time = new Date().toLocaleTimeString(locale);
   el.innerHTML = `
     <div class="chat-msg-header">
-      <span>${role === 'user' ? 'Você' : 'MarketDesk AI'}</span>
-      ${role === 'assistant' ? '<span class="badge neutral">Análise educacional</span>' : ''}
+      <span>${role === 'user' ? t('chatYou') : t('chatAI')}</span>
+      ${role === 'assistant' ? `<span class="badge neutral">${t('chatBadge')}</span>` : ''}
       <span class="chat-time">${time}</span>
     </div>
     <div class="chat-msg-body">${escapeHtml(text)}</div>
-    ${role === 'assistant' ? '<button class="chat-copy-btn">Copiar</button>' : ''}
+    ${role === 'assistant' ? `<button class="chat-copy-btn">${t('chatCopy')}</button>` : ''}
   `;
   log.appendChild(el);
   log.scrollTop = log.scrollHeight;
@@ -54,10 +50,9 @@ function setTypingIndicator(visible) {
 
 function highlightIndicatorsMentioned(text) {
   const map = { RSI: 'rsi', MACD: 'macd', Bollinger: 'bollinger', ATR: 'atr', volume: 'volume' };
-  Object.entries(map).forEach(([keyword, _id]) => {
+  Object.entries(map).forEach(([keyword]) => {
     if (text.toLowerCase().includes(keyword.toLowerCase())) {
-      const rows = document.querySelectorAll('.indicator-name');
-      rows.forEach((row) => {
+      document.querySelectorAll('.indicator-name').forEach((row) => {
         if (row.textContent.toLowerCase().includes(keyword.toLowerCase())) {
           const parentRow = row.closest('.indicator-row');
           if (parentRow) {
@@ -91,8 +86,8 @@ async function sendChatMessage(text) {
     });
 
     if (!res.ok || !res.body) {
-      const err = await res.json().catch(() => ({ error: 'Falha ao conectar ao chat.' }));
-      bodyEl.textContent = err.error || 'Falha ao conectar ao chat.';
+      const err = await res.json().catch(() => ({ error: t('chatConnectErr') + res.status }));
+      bodyEl.textContent = err.error || t('chatConnectErr') + res.status;
       setTypingIndicator(false);
       return;
     }
@@ -110,23 +105,17 @@ async function sendChatMessage(text) {
       buffer = lines.pop();
 
       for (const line of lines) {
-        if (line.startsWith('event: ')) {
-          currentEvent = line.slice(7).trim();
-          continue;
-        }
+        if (line.startsWith('event: ')) { currentEvent = line.slice(7).trim(); continue; }
         if (line.startsWith('data: ')) {
-          const dataStr = line.slice(6);
           if (currentEvent === 'tool_trace') continue;
           try {
-            const evt = JSON.parse(dataStr);
+            const evt = JSON.parse(line.slice(6));
             if (evt.type === 'content_block_delta' && evt.delta?.type === 'text_delta') {
               fullText += evt.delta.text;
               bodyEl.textContent = fullText;
               document.getElementById('chat-log').scrollTop = document.getElementById('chat-log').scrollHeight;
             }
-          } catch {
-            // ignore non-JSON keepalive lines
-          }
+          } catch { /* keepalive */ }
         }
       }
     }
@@ -134,26 +123,26 @@ async function sendChatMessage(text) {
     chatHistory.push({ role: 'assistant', content: fullText });
     highlightIndicatorsMentioned(fullText);
   } catch (err) {
-    bodyEl.textContent = 'Erro ao conectar ao chat: ' + err.message;
+    bodyEl.textContent = t('chatConnectErr') + err.message;
   } finally {
     setTypingIndicator(false);
   }
+}
+
+function askChatAboutNews(item) {
+  const prompt = window.LANG === 'pt'
+    ? `Pode comentar esta notícia? "${item.title}" (${item.source})`
+    : `Can you comment on this news? "${item.title}" (${item.source})`;
+  document.getElementById('chat-input').value = prompt;
+  sendChatMessage();
 }
 
 function initChat() {
   renderChatChips();
   document.getElementById('chat-send').addEventListener('click', () => sendChatMessage());
   document.getElementById('chat-input').addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      sendChatMessage();
-    }
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChatMessage(); }
   });
-}
-
-function askChatAboutNews(item) {
-  document.getElementById('chat-input').value = `Pode comentar esta notícia? "${item.title}" (${item.source})`;
-  sendChatMessage();
 }
 
 document.addEventListener('DOMContentLoaded', initChat);

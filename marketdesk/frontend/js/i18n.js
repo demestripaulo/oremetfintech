@@ -78,6 +78,34 @@ const I18N = {
     disclaimer: '⚠️ This tool is for educational purposes. Projections are based on historical technical analysis and do not constitute financial advice. Always trade with proper risk management.',
     // Glossary
     learnSummary: 'Learn the Market',
+    // Chat
+    chatYou: 'You', chatAI: 'MarketDesk AI',
+    chatBadge: 'Educational analysis',
+    chatCopy: 'Copy',
+    chatAskAI: 'Ask AI',
+    chatConnectErr: 'Failed to connect to chat: ',
+    // Chat quick chips
+    chip1: 'Why this move?', chip2: 'Explain RSI',
+    chip3: 'Range next 2h', chip4: 'Current pattern',
+    chip5: 'Critical levels', chip6: 'Day summary',
+    // Connectors / external
+    loadingBtcCorr: 'Loading BTC correlates...',
+    danelfinPending: 'Setup pending',
+    danelfinMsg: 'Danelfin API key not configured. BTC correlates will appear when the key is added to the Worker.',
+    danelfinNone: 'No BTC correlates available at the moment.',
+    danelfinNoScore: 'No score estimated.',
+    socialSentiment: 'Social Sentiment',
+    sentimentSrc: 'Positive votes (CoinGecko)',
+    onChain: 'On-chain (Glassnode)',
+    activeAddresses: 'Active addresses',
+    exchangeNetflow: 'Exchange Netflow',
+    exchangeSrc: 'BTC (Glassnode)',
+    externalUnavailable: 'External intelligence unavailable: ',
+    noNews: 'No relevant news in the last 2 hours.',
+    newsUnavailable: 'News feed unavailable: ',
+    tsLogEmpty: 'No messages yet.',
+    tsTestOk: 'TrendSpider connection OK',
+    tsTestFail: 'Failed: ',
   },
 
   pt: {
@@ -156,6 +184,34 @@ const I18N = {
     disclaimer: '⚠️ Esta ferramenta é educacional. Projeções são baseadas em análise técnica histórica e não constituem conselho financeiro. Opere sempre com gestão de risco adequada.',
     // Glossary
     learnSummary: 'Aprenda o mercado',
+    // Chat
+    chatYou: 'Você', chatAI: 'MarketDesk AI',
+    chatBadge: 'Análise educacional',
+    chatCopy: 'Copiar',
+    chatAskAI: 'Perguntar à IA',
+    chatConnectErr: 'Erro ao conectar ao chat: ',
+    // Chat quick chips
+    chip1: 'Por que esse movimento?', chip2: 'Explica o RSI',
+    chip3: 'Range das próximas 2h', chip4: 'Padrão atual',
+    chip5: 'Níveis críticos', chip6: 'Resumo do dia',
+    // Connectors / external
+    loadingBtcCorr: 'Verificando correlatos BTC...',
+    danelfinPending: 'Configuração pendente',
+    danelfinMsg: 'Danelfin API key não configurada. Os correlatos BTC serão exibidos quando a chave for adicionada ao Worker.',
+    danelfinNone: 'Nenhum correlato BTC disponível no momento.',
+    danelfinNoScore: 'Nenhum score foi estimado.',
+    socialSentiment: 'Sentimento social',
+    sentimentSrc: 'Votos positivos (CoinGecko)',
+    onChain: 'On-chain (Glassnode)',
+    activeAddresses: 'Endereços ativos',
+    exchangeNetflow: 'Exchange netflow',
+    exchangeSrc: 'BTC (Glassnode)',
+    externalUnavailable: 'Inteligência externa indisponível: ',
+    noNews: 'Nenhuma notícia relevante nas últimas 2 horas.',
+    newsUnavailable: 'Feed de notícias indisponível: ',
+    tsLogEmpty: 'Sem mensagens ainda.',
+    tsTestOk: 'Conexão TrendSpider OK',
+    tsTestFail: 'Falha: ',
   },
 };
 
@@ -175,6 +231,11 @@ function setLang(lang) {
   // Re-render dynamic panels
   if (typeof loadAll === 'function') loadAll();
   if (typeof renderGlossary === 'function') renderGlossary();
+  if (typeof renderChatChips === 'function') renderChatChips();
+  if (typeof loadIntelligencePanel === 'function') loadIntelligencePanel();
+  if (typeof loadDanelfinPanel === 'function') loadDanelfinPanel();
+  if (typeof loadNewsFeed === 'function') loadNewsFeed();
+  if (typeof refreshTrendspiderLog === 'function') refreshTrendspiderLog();
   document.querySelectorAll('.lang-btn').forEach((b) => {
     b.classList.toggle('active', b.dataset.lang === lang);
   });
@@ -209,4 +270,8 @@ document.addEventListener('DOMContentLoaded', () => {
     b.classList.toggle('active', b.dataset.lang === window.LANG);
     b.addEventListener('click', () => setLang(b.dataset.lang));
   });
+  // Render flag emoji via Twemoji for cross-platform support
+  if (typeof twemoji !== 'undefined') {
+    twemoji.parse(document.querySelector('.lang-switcher'), { folder: 'svg', ext: '.svg' });
+  }
 });
