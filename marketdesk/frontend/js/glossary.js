@@ -14,6 +14,20 @@ const GLOSSARY = {
   'Bearish Engulfing': 'Vela de baixa que engole completamente a vela anterior de alta — forte sinal vendedor.',
   'Morning Star': 'Padrão de três velas que sinaliza reversão de baixa para alta.',
   'Evening Star': 'Padrão de três velas que sinaliza reversão de alta para baixa.',
+  // S/R levels
+  R2: 'Segunda Resistência: nível acima do qual o preço raramente sobe sem força compradora muito intensa. Zona de atenção para possíveis reversões.',
+  R1: 'Primeira Resistência: barreira imediata acima do preço atual. Se rompida com volume, pode acelerar a alta.',
+  Pivot: 'Ponto Pivô: nível central calculado como (máxima + mínima + fechamento) ÷ 3 do período anterior. Define o "equilíbrio" do mercado — acima = bullish, abaixo = bearish.',
+  S1: 'Primeiro Suporte: piso imediato abaixo do preço atual. Zona onde compradores costumam aparecer para defender a queda.',
+  S2: 'Segundo Suporte: suporte mais distante. Perder este nível indica pressão vendedora significativa.',
+  // Bias
+  BULLISH: 'Viés de Alta: os indicadores técnicos apontam para maior probabilidade de o preço subir no horizonte analisado. Não é garantia — é uma leitura probabilística do momentum atual.',
+  BEARISH: 'Viés de Baixa: os indicadores apontam para maior probabilidade de queda. O mercado apresenta mais pressão vendedora do que compradora no momento.',
+  NEUTRAL: 'Sem tendência definida: o mercado não apresenta força direcional clara. Movimentos laterais são mais prováveis; aguardar confirmação antes de tomar posição.',
+  // Chart lines
+  'EMA 9': 'Linha Dourada — EMA 9: Média Móvel Exponencial dos últimos 9 períodos. Reflete o momentum de curtíssimo prazo. Quando o preço está acima dela, tendência imediata é de alta.',
+  'EMA 21': 'Linha Azul — EMA 21: Média Móvel Exponencial de 21 períodos. Referência de tendência de curto prazo. Cruzamento com EMA 9 sinaliza mudança de momentum.',
+  'SMA 50': 'Linha Creme — SMA 50: Média Móvel Simples de 50 períodos. Tendência de médio prazo. Preço acima = território bull; abaixo = território bear.',
 };
 
 function renderGlossary() {

@@ -84,20 +84,18 @@ class MarketChart {
 }
 
 function chartTheme() {
-  const styles = getComputedStyle(document.documentElement);
-  const css = (name, fallback) => styles.getPropertyValue(name).trim() || fallback;
   return {
-    card: css('--card', '#102A4C'),
-    text: css('--text', '#F7F4EC'),
-    border: css('--border', 'rgba(212, 175, 55, 0.22)'),
-    grid: css('--chart-grid', 'rgba(243, 230, 179, 0.08)'),
-    bull: css('--bull', '#D4AF37'),
-    bear: css('--bear', '#C94C4C'),
-    gold: css('--gold', '#D4AF37'),
-    goldSoft: css('--gold-soft', '#F3E6B3'),
-    info: css('--info', '#7EA6D9'),
-    bullVolume: css('--bull-volume', 'rgba(212, 175, 55, 0.35)'),
-    bearVolume: css('--bear-volume', 'rgba(201, 76, 76, 0.35)'),
+    card: '#050e1a',
+    text: '#33FF77',
+    border: 'rgba(212, 175, 55, 0.4)',
+    grid: 'rgba(51, 255, 119, 0.05)',
+    bull: '#00E676',
+    bear: '#FF1744',
+    gold: '#D4AF37',
+    goldSoft: '#F3E6B3',
+    info: '#7EA6D9',
+    bullVolume: 'rgba(0, 230, 118, 0.22)',
+    bearVolume: 'rgba(255, 23, 68, 0.22)',
   };
 }
 

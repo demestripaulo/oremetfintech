@@ -104,7 +104,7 @@ function renderSupportResistance(pivots, price) {
         ${levels.map((l, i) => {
           const distPct = (((l.value - price) / price) * 100).toFixed(2);
           return `<tr class="${i === criticalIdx ? 'critical' : ''}">
-            <td>${l.label}</td>
+            <td>${withTooltip(l.label, l.label)}</td>
             <td class="mono">${l.value.toFixed(2)}</td>
             <td class="mono">${distPct}%</td>
           </tr>`;

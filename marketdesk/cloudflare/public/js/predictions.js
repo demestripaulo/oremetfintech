@@ -9,11 +9,13 @@ function renderPredictionCard(p) {
   if (p.interval === '15min') label = 'Próximos 15 minutos (Kalshi 15-min)';
   else if (p.interval === '1h') label = 'Próxima hora (Kalshi Hourly)';
   else label = `Fechamento 17h ET (Kalshi Daily)${p.kalshiTarget ? ' — ' + p.kalshiTarget : ''}`;
+  const biasKey = p.bias.toUpperCase();
+  const biasTip = (typeof withTooltip === 'function') ? withTooltip(biasKey, biasKey) : biasKey;
   return `
     <div class="card prediction-card ${biasClass(p.bias)}" style="margin-bottom:10px">
       <div class="prediction-header">
         <strong>${label}</strong>
-        <span class="badge ${p.bias === 'bullish' ? 'buy' : p.bias === 'bearish' ? 'sell' : 'neutral'}">${p.bias.toUpperCase()}</span>
+        <span class="badge ${p.bias === 'bullish' ? 'buy' : p.bias === 'bearish' ? 'sell' : 'neutral'}">${biasTip}</span>
       </div>
       <div class="prediction-range mono">${p.range_low.toFixed(2)} — ${p.range_high.toFixed(2)}</div>
       <div class="indicator-explain">Ponto médio: ${p.midpoint.toFixed(2)} · Confiança: ${p.confidence}%</div>
@@ -61,9 +63,11 @@ function renderHistory(log) {
   }).join('');
 
   container.innerHTML = `
-    <table class="history-table">
-      <thead><tr><th>Horário</th><th>Intervalo</th><th>Range previsto</th><th>Resultado</th></tr></thead>
-      <tbody>${rows}</tbody>
-    </table>
+    <div class="history-scroll">
+      <table class="history-table">
+        <thead><tr><th>Horário</th><th>Intervalo</th><th>Range previsto</th><th>Resultado</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
   `;
 }
