@@ -12,7 +12,7 @@ import {
 //   '15min' — next 15-minute candle (Kalshi 15-min markets)
 //   '1h'    — next 60-minute candle (Kalshi hourly markets)
 //   'daily' — closing price at 5 PM ET today (Kalshi daily BTC markets)
-export function predictRange(candles, interval) {
+export function predictRange(candles, interval, lang = 'en') {
   const currentPrice = candles[candles.length - 1].close;
   const atr = calculateATR(candles, 14);
 
@@ -65,14 +65,7 @@ export function predictRange(candles, interval) {
   else if (momentumScore < -0.15) bias = 'bearish';
 
   const explanation = buildExplanation({
-    interval,
-    bias,
-    rsi,
-    macd,
-    volRatio,
-    pattern,
-    atr,
-    confidence,
+    interval, bias, rsi, macd, volRatio, pattern, atr, confidence, lang,
   });
 
   return {
@@ -131,12 +124,33 @@ function calculateConfluence(rsi, macd, volRatio, pattern, interval) {
   return Math.max(20, Math.min(95, score));
 }
 
-function buildExplanation({ interval, bias, rsi, macd, volRatio, pattern, atr, confidence }) {
-  let horizonLabel;
-  if (interval === '15min') horizonLabel = 'os próximos 15 minutos';
-  else if (interval === '1h') horizonLabel = 'a próxima hora';
-  else horizonLabel = `o fechamento de hoje às 17h ET (Kalshi Daily)`;
+function buildExplanation({ interval, bias, rsi, macd, volRatio, pattern, atr, confidence, lang }) {
+  const isEn = lang !== 'pt';
 
+  if (isEn) {
+    const horizonLabel = interval === '15min' ? 'the next 15 minutes' : interval === '1h' ? 'the next hour' : "today's close at 5 PM ET (Kalshi Daily)";
+    const biasLabel = bias === 'bullish' ? 'bullish bias' : bias === 'bearish' ? 'bearish bias' : 'neutral/sideways bias';
+    const rsiText = rsi > 70
+      ? `RSI at ${round(rsi, 1)} indicates overbought conditions, which may limit further gains.`
+      : rsi < 30
+      ? `RSI at ${round(rsi, 1)} indicates oversold conditions, which may favor a recovery.`
+      : `RSI at ${round(rsi, 1)} is in neutral territory with no extreme readings.`;
+    const macdText = `MACD is trending ${macd.direction === 'bullish' ? 'upward' : macd.direction === 'bearish' ? 'downward' : 'sideways'}, reinforcing current momentum.`;
+    const volText = volRatio > 1.2
+      ? 'Current volume is above average, confirming the strength of the move.'
+      : volRatio < 0.7
+      ? 'Volume is below average, suggesting low conviction in the current move.'
+      : 'Volume is within the recent average range.';
+    const patternText = `The latest detected candlestick pattern is "${pattern.name}".`;
+    const atrText = `Recent average volatility (ATR) is ${round(atr, 2)}, used as the basis for the projected range.`;
+    const dailyNote = interval === 'daily'
+      ? ' For the Kalshi daily market, the projected range expands with the time remaining until 5 PM ET using square-root scaling of intraday volatility.'
+      : '';
+    return `For ${horizonLabel}, the model signals a ${biasLabel} with ${round(confidence, 0)}% confidence. ${rsiText} ${macdText} ${volText} ${patternText} ${atrText}${dailyNote} This is an educational estimate based on historical technical analysis, not a guarantee of future price movement.`;
+  }
+
+  // Portuguese
+  const horizonLabel = interval === '15min' ? 'os próximos 15 minutos' : interval === '1h' ? 'a próxima hora' : 'o fechamento de hoje às 17h ET (Kalshi Daily)';
   const biasLabel = bias === 'bullish' ? 'viés de alta' : bias === 'bearish' ? 'viés de baixa' : 'viés neutro/lateral';
   const rsiText = rsi > 70
     ? `RSI em ${round(rsi, 1)} indica sobrecompra, o que pode limitar novas altas.`
@@ -152,8 +166,7 @@ function buildExplanation({ interval, bias, rsi, macd, volRatio, pattern, atr, c
   const patternText = `O último padrão de candlestick identificado foi "${pattern.name}".`;
   const atrText = `A volatilidade média (ATR) recente é de ${round(atr, 2)}, usada como base para o range projetado.`;
   const dailyNote = interval === 'daily'
-    ? ' Para o mercado diário do Kalshi, o range projeção cresce com o tempo restante até as 17h ET usando escala raiz-quadrada da volatilidade intra-diária.'
+    ? ' Para o mercado diário do Kalshi, o range de projeção cresce com o tempo restante até as 17h ET usando escala raiz-quadrada da volatilidade intra-diária.'
     : '';
-
   return `Para ${horizonLabel}, o modelo aponta um ${biasLabel} com confiança de ${round(confidence, 0)}%. ${rsiText} ${macdText} ${volText} ${patternText} ${atrText}${dailyNote} Esta é uma estimativa educacional baseada em análise técnica histórica, não uma garantia de movimento futuro.`;
 }

@@ -129,7 +129,7 @@ async function loadCandles() {
 
 async function loadAnalysis() {
   try {
-    const res = await fetch(`${API_BASE}/api/analysis?symbol=${activeSymbol}`);
+    const res = await fetch(`${API_BASE}/api/analysis?symbol=${activeSymbol}&lang=${window.LANG || 'en'}`);
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
     renderIndicators(data.indicators);
@@ -148,7 +148,7 @@ async function loadAnalysis() {
 async function loadPredictions() {
   setPanelMessage('predictions-container', t('generatingPredictions'));
   try {
-    const res = await fetch(`${API_BASE}/api/predictions?symbol=${activeSymbol}`);
+    const res = await fetch(`${API_BASE}/api/predictions?symbol=${activeSymbol}&lang=${window.LANG || 'en'}`);
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
     renderPredictions(data);

@@ -71,17 +71,19 @@ async function handleRequest(request, env) {
 
   if (url.pathname === '/api/analysis') {
     const symbol = url.searchParams.get('symbol') || 'BTCUSDT';
+    const lang = url.searchParams.get('lang') || 'en';
     const candles = await fetchKlines(symbol, '1m', 200);
-    const indicators = buildIndicatorPanel(candles);
+    const indicators = buildIndicatorPanel(candles, lang);
     return json({ symbol, indicators });
   }
 
   if (url.pathname === '/api/predictions') {
     const symbol = url.searchParams.get('symbol') || 'BTCUSDT';
+    const lang = url.searchParams.get('lang') || 'en';
     const candles = await fetchKlines(symbol, '1m', 200);
-    const fifteenMin = predictRange(candles, '15min');
-    const oneHour = predictRange(candles, '1h');
-    const daily = predictRange(candles, 'daily');
+    const fifteenMin = predictRange(candles, '15min', lang);
+    const oneHour = predictRange(candles, '1h', lang);
+    const daily = predictRange(candles, 'daily', lang);
     const record = { symbol, generatedAt: Date.now(), fifteenMin, oneHour, daily };
     await persistPredictionLog(env, record);
     return json(record);

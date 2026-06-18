@@ -6,7 +6,7 @@ class MarketChart {
     }
 
     const theme = chartTheme();
-    this.tzOffset = -5 * 3600; // UTC-5
+    this.tzOffset = -4 * 3600; // UTC-4 (EDT — US Eastern Daylight Time)
 
     this.chart = LightweightCharts.createChart(this.container, {
       autoSize: true,

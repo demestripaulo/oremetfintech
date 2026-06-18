@@ -110,7 +110,7 @@ export function volumeRatio(candles, period = 20) {
 }
 
 export function detectCandlePattern(candles) {
-  if (candles.length < 3) return { name: 'Indefinido', bias: 'neutral' };
+  if (candles.length < 3) return { name: 'Undefined', bias: 'neutral' };
   const c0 = candles[candles.length - 1];
   const c1 = candles[candles.length - 2];
   const c2 = candles[candles.length - 3];
@@ -168,7 +168,7 @@ export function detectCandlePattern(candles) {
   ) {
     return { name: 'Evening Star', bias: 'bearish' };
   }
-  return { name: c0.close >= c0.open ? 'Vela de Alta' : 'Vela de Baixa', bias: c0.close >= c0.open ? 'bullish' : 'bearish' };
+  return { name: c0.close >= c0.open ? 'Bullish Candle' : 'Bearish Candle', bias: c0.close >= c0.open ? 'bullish' : 'bearish' };
 }
 
 export function calculatePivotPoints(candles) {
@@ -185,7 +185,7 @@ export function calculatePivotPoints(candles) {
   return { pivot, r1, r2, s1, s2 };
 }
 
-export function buildIndicatorPanel(candles) {
+export function buildIndicatorPanel(candles, lang = 'en') {
   const price = candles[candles.length - 1].close;
   const rsi = calculateRSI(candles, 14);
   const macd = calculateMACD(candles);
@@ -197,37 +197,80 @@ export function buildIndicatorPanel(candles) {
   const ema21 = ema(candles.map((c) => c.close), 21);
   const sma50 = sma(candles.map((c) => c.close), 50);
 
-  const rsiStatus = rsi > 70 ? 'VENDA' : rsi < 30 ? 'COMPRA' : 'NEUTRO';
-  const macdStatus = macd.direction === 'bullish' ? 'COMPRA' : macd.direction === 'bearish' ? 'VENDA' : 'NEUTRO';
-  const bbStatus = price > bb.upper ? 'VENDA' : price < bb.lower ? 'COMPRA' : 'NEUTRO';
-  const volStatus = volRatio > 1.2 ? 'COMPRA' : volRatio < 0.7 ? 'VENDA' : 'NEUTRO';
+  const rsiStatus = rsi > 70 ? 'SELL' : rsi < 30 ? 'BUY' : 'NEUTRAL';
+  const macdStatus = macd.direction === 'bullish' ? 'BUY' : macd.direction === 'bearish' ? 'SELL' : 'NEUTRAL';
+  const bbStatus = price > bb.upper ? 'SELL' : price < bb.lower ? 'BUY' : 'NEUTRAL';
+  const volStatus = volRatio > 1.2 ? 'BUY' : volRatio < 0.7 ? 'SELL' : 'NEUTRAL';
+
+  const isEn = lang !== 'pt';
 
   return {
     price,
     ema9,
     ema21,
     sma50,
-    rsi: { value: round(rsi, 2), status: rsiStatus, explanation: 'RSI mede a velocidade dos movimentos de preço; acima de 70 sugere sobrecompra, abaixo de 30 sugere sobrevenda.' },
-    macd: { ...macd, macd: round(macd.macd, 2), signal: round(macd.signal, 2), histogram: round(macd.histogram, 2), status: macdStatus, explanation: 'MACD compara médias móveis rápidas e lentas; histograma positivo e crescente indica força compradora.' },
-    bollinger: { upper: round(bb.upper, 2), middle: round(bb.middle, 2), lower: round(bb.lower, 2), status: bbStatus, explanation: 'Bollinger Bands mostram a volatilidade; preço tocando a banda superior/inferior pode indicar exaustão do movimento.' },
-    atr: { value: round(atr, 2), explanation: 'ATR mede a volatilidade média recente em valor absoluto de preço, usado para estimar ranges futuros.' },
-    volume: { ratio: round(volRatio, 2), status: volStatus, explanation: 'Compara o volume atual com a média das últimas 20 velas; volume alto confirma a força do movimento.' },
-    pattern: { ...pattern, explanation: patternExplanation(pattern.name) },
+    rsi: { value: round(rsi, 2), status: rsiStatus, explanation: isEn
+      ? 'RSI measures price movement speed; above 70 suggests overbought, below 30 oversold.'
+      : 'RSI mede a velocidade dos movimentos de preço; acima de 70 sugere sobrecompra, abaixo de 30 sobrevenda.' },
+    macd: { ...macd, macd: round(macd.macd, 2), signal: round(macd.signal, 2), histogram: round(macd.histogram, 2), status: macdStatus, explanation: isEn
+      ? 'MACD compares fast and slow moving averages; positive and rising histogram indicates buying strength.'
+      : 'MACD compara médias móveis rápidas e lentas; histograma positivo e crescente indica força compradora.' },
+    bollinger: { upper: round(bb.upper, 2), middle: round(bb.middle, 2), lower: round(bb.lower, 2), status: bbStatus, explanation: isEn
+      ? 'Bollinger Bands show volatility; price touching the upper/lower band may indicate exhaustion of the move.'
+      : 'Bollinger Bands mostram a volatilidade; preço tocando a banda superior/inferior pode indicar exaustão do movimento.' },
+    atr: { value: round(atr, 2), explanation: isEn
+      ? 'ATR measures average recent volatility in absolute price value, used to estimate future ranges.'
+      : 'ATR mede a volatilidade média recente em valor absoluto de preço, usado para estimar ranges futuros.' },
+    volume: { ratio: round(volRatio, 2), status: volStatus, explanation: isEn
+      ? 'Compares current volume to the 20-candle average; high volume confirms the strength of the move.'
+      : 'Compara o volume atual com a média das últimas 20 velas; volume alto confirma a força do movimento.' },
+    pattern: { ...pattern, explanation: patternExplanation(pattern.name, isEn) },
     pivots: calculatePivotPoints(candles),
   };
 }
 
-function patternExplanation(name) {
+function patternExplanation(name, isEn) {
   const map = {
-    'Doji': 'Indecisão do mercado: abertura e fechamento muito próximos.',
-    'Hammer': 'Rejeição de preços baixos com forte recuperação, sinal de possível reversão de alta.',
-    'Shooting Star': 'Rejeição de preços altos, sinal de possível reversão de baixa.',
-    'Bullish Engulfing': 'Vela de alta que engole completamente a vela anterior de baixa, forte sinal comprador.',
-    'Bearish Engulfing': 'Vela de baixa que engole completamente a vela anterior de alta, forte sinal vendedor.',
-    'Morning Star': 'Padrão de três velas que sinaliza reversão de tendência de baixa para alta.',
-    'Evening Star': 'Padrão de três velas que sinaliza reversão de tendência de alta para baixa.',
+    'Doji':             [
+      'Market indecision: open and close very close together.',
+      'Indecisão do mercado: abertura e fechamento muito próximos.',
+    ],
+    'Hammer':           [
+      'Rejection of low prices with strong recovery — possible bullish reversal signal.',
+      'Rejeição de preços baixos com forte recuperação, sinal de possível reversão de alta.',
+    ],
+    'Shooting Star':    [
+      'Rejection of high prices — possible bearish reversal signal.',
+      'Rejeição de preços altos, sinal de possível reversão de baixa.',
+    ],
+    'Bullish Engulfing':[
+      'Bullish candle fully engulfs the prior bearish candle — strong buy signal.',
+      'Vela de alta que engole completamente a vela anterior de baixa, forte sinal comprador.',
+    ],
+    'Bearish Engulfing':[
+      'Bearish candle fully engulfs the prior bullish candle — strong sell signal.',
+      'Vela de baixa que engole completamente a vela anterior de alta, forte sinal vendedor.',
+    ],
+    'Morning Star':     [
+      'Three-candle pattern signaling reversal from downtrend to uptrend.',
+      'Padrão de três velas que sinaliza reversão de tendência de baixa para alta.',
+    ],
+    'Evening Star':     [
+      'Three-candle pattern signaling reversal from uptrend to downtrend.',
+      'Padrão de três velas que sinaliza reversão de tendência de alta para baixa.',
+    ],
+    'Bullish Candle':   [
+      'Standard bullish candle — no special reversal pattern.',
+      'Vela de alta padrão sem configuração especial de reversão.',
+    ],
+    'Bearish Candle':   [
+      'Standard bearish candle — no special reversal pattern.',
+      'Vela de baixa padrão sem configuração especial de reversão.',
+    ],
   };
-  return map[name] || 'Vela padrão sem configuração especial de reversão.';
+  const entry = map[name];
+  if (entry) return isEn ? entry[0] : entry[1];
+  return isEn ? 'Standard candle — no special reversal pattern.' : 'Vela padrão sem configuração especial de reversão.';
 }
 
 export function round(n, d = 2) {
