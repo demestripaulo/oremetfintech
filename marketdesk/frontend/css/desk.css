@@ -48,6 +48,15 @@ header.topbar {
   z-index: 10;
 }
 
+.header-seal {
+  height: 52px;
+  width: 52px;
+  flex-shrink: 0;
+  mix-blend-mode: screen;
+  opacity: 0.92;
+  filter: drop-shadow(0 0 6px rgba(212,175,55,0.4));
+}
+
 .brand {
   font-weight: 700;
   font-size: 17px;

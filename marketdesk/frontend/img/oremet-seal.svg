@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 540" width="500" height="540">
+  <defs>
+    <style>
+      text { font-family: 'Times New Roman', serif; fill: #D4AF37; }
+    </style>
+  </defs>
+
+  <!-- Outer double ring -->
+  <circle cx="250" cy="250" r="238" fill="none" stroke="#D4AF37" stroke-width="2.5"/>
+  <circle cx="250" cy="250" r="228" fill="none" stroke="#D4AF37" stroke-width="1.2"/>
+
+  <!-- Star of David (hexagram) -->
+  <!-- Triangle pointing up -->
+  <polygon points="250,95 370,300 130,300" fill="none" stroke="#D4AF37" stroke-width="2.2"/>
+  <!-- Triangle pointing down -->
+  <polygon points="250,405 130,200 370,200" fill="none" stroke="#D4AF37" stroke-width="2.2"/>
+
+  <!-- Inner triangle (alchemical upward) -->
+  <polygon points="250,148 340,295 160,295" fill="none" stroke="#D4AF37" stroke-width="1.5"/>
+
+  <!-- Lotus / mandala center -->
+  <g transform="translate(250,250)">
+    <!-- Petals -->
+    <ellipse rx="18" ry="32" fill="none" stroke="#D4AF37" stroke-width="1.2" transform="rotate(0)"/>
+    <ellipse rx="18" ry="32" fill="none" stroke="#D4AF37" stroke-width="1.2" transform="rotate(45)"/>
+    <ellipse rx="18" ry="32" fill="none" stroke="#D4AF37" stroke-width="1.2" transform="rotate(90)"/>
+    <ellipse rx="18" ry="32" fill="none" stroke="#D4AF37" stroke-width="1.2" transform="rotate(135)"/>
+    <!-- Inner circle of lotus -->
+    <circle r="14" fill="none" stroke="#D4AF37" stroke-width="1.5"/>
+    <circle r="7" fill="#D4AF37" opacity="0.5"/>
+  </g>
+
+  <!-- Aleph (א) — left large -->
+  <text x="42" y="290" font-size="88" font-weight="bold" text-anchor="middle" opacity="0.95">א</text>
+
+  <!-- Aleph (א) — right large -->
+  <text x="458" y="290" font-size="88" font-weight="bold" text-anchor="middle" opacity="0.95">א</text>
+
+  <!-- Small aleph bottom center -->
+  <text x="250" y="400" font-size="72" font-weight="bold" text-anchor="middle" opacity="0.95">א</text>
+
+  <!-- אמת (Truth) inside triangle -->
+  <text x="250" y="268" font-size="26" font-weight="bold" text-anchor="middle">אמת</text>
+
+  <!-- מכבות below אמת -->
+  <text x="250" y="298" font-size="20" text-anchor="middle">מכבות</text>
+
+  <!-- Curved text top: שערי-שערי-צדק -->
+  <path id="arc-top" d="M 50,250 A 200,200 0 0,1 450,250" fill="none"/>
+  <text font-size="22" font-weight="500" letter-spacing="2">
+    <textPath href="#arc-top" startOffset="10%">שערי-שערי-צדק</textPath>
+  </text>
+
+  <!-- Curved text bottom: פתחו-לי-צם  כם אודה יה -->
+  <path id="arc-bottom" d="M 72,290 A 200,200 0 0,0 428,290" fill="none"/>
+  <text font-size="18" letter-spacing="1">
+    <textPath href="#arc-bottom" startOffset="8%">פתחו-לי-צם    כם אודה יה</textPath>
+  </text>
+
+  <!-- OrEmet text below seal -->
+  <text x="250" y="510" font-size="32" text-anchor="middle" font-style="italic" letter-spacing="3">OrEmet</text>
+</svg>
