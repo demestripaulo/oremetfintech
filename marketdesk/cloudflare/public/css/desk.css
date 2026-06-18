@@ -99,6 +99,36 @@ header.topbar {
   white-space: nowrap;
 }
 
+/* ---------- Language switcher ---------- */
+.lang-switcher {
+  display: flex;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.lang-btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: border-color 0.2s, color 0.2s, background 0.2s;
+  white-space: nowrap;
+}
+
+.lang-btn:hover {
+  border-color: var(--gold);
+  color: var(--text);
+}
+
+.lang-btn.active {
+  border-color: var(--gold);
+  color: var(--gold);
+  background: rgba(212, 175, 55, 0.1);
+}
+
 /* ---------- Layout ---------- */
 main.layout {
   display: grid;

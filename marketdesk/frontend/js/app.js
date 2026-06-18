@@ -109,20 +109,20 @@ async function fetchTickers() {
 // ---------- REST loaders ----------
 async function loadCandles() {
   if (!chart) return [];
-  setChartMessage(`Carregando candles reais de ${activeSymbol}...`);
+  setChartMessage(`${t('loadingCandles')} ${activeSymbol}...`);
   try {
     const res = await fetch(`${API_BASE}/api/candles?symbol=${activeSymbol}&interval=${activeTimeframe}&limit=200`);
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
     if (!Array.isArray(data.candles) || data.candles.length === 0) {
-      throw new Error('API retornou candles vazios');
+      throw new Error('API returned empty candles');
     }
     chart.setCandles(data.candles);
     clearChartMessage();
     return data.candles;
   } catch (err) {
     console.error('Failed to load candles', err);
-    setChartMessage(`Não foi possível carregar candles reais agora: ${err.message}`, 'error');
+    setChartMessage(`${t('candlesUnavailable')}: ${err.message}`, 'error');
     return [];
   }
 }
@@ -138,15 +138,15 @@ async function loadAnalysis() {
     return data.indicators;
   } catch (err) {
     console.error('Failed to load analysis', err);
-    setPanelMessage('indicators-container', `Indicadores indisponíveis: ${err.message}`, 'error');
-    setPanelMessage('sr-container', 'Suporte e resistência indisponíveis até os indicadores carregarem.', 'error');
-    setPanelMessage('connectors-container', 'Conectores de decisão indisponíveis até os indicadores carregarem.', 'error');
+    setPanelMessage('indicators-container', `${t('indicatorsUnavailable')}: ${err.message}`, 'error');
+    setPanelMessage('sr-container', t('srUnavailable'), 'error');
+    setPanelMessage('connectors-container', t('connectorsUnavailable'), 'error');
     return null;
   }
 }
 
 async function loadPredictions() {
-  setPanelMessage('predictions-container', 'Gerando previsões educacionais...');
+  setPanelMessage('predictions-container', t('generatingPredictions'));
   try {
     const res = await fetch(`${API_BASE}/api/predictions?symbol=${activeSymbol}`);
     const data = await res.json();
@@ -154,7 +154,7 @@ async function loadPredictions() {
     renderPredictions(data);
   } catch (err) {
     console.error('Failed to load predictions', err);
-    setPanelMessage('predictions-container', `Previsões indisponíveis: ${err.message}`, 'error');
+    setPanelMessage('predictions-container', `${t('predictionsUnavailable')}: ${err.message}`, 'error');
   }
 }
 
@@ -166,7 +166,7 @@ async function loadHistory() {
     renderHistory(data.log);
   } catch (err) {
     console.error('Failed to load history', err);
-    setPanelMessage('history-container', `Histórico indisponível: ${err.message}`, 'error');
+    setPanelMessage('history-container', `${t('historyUnavailable')}: ${err.message}`, 'error');
   }
 }
 
@@ -259,7 +259,7 @@ function scheduleWsReconnect() {
 
 // ---------- Init ----------
 document.addEventListener('DOMContentLoaded', () => {
-  setChartMessage('Inicializando gráfico...');
+  setChartMessage(t('initializingChart'));
   try {
     chart = new MarketChart('chart-container');
   } catch (err) {

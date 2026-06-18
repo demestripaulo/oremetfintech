@@ -1,10 +1,10 @@
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="en">
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
-<title>OrEmet MarketDesk — Mesa de Análise Educacional</title>
+<title>OrEmet MarketDesk — Educational Analysis Desk</title>
 <link rel="stylesheet" href="css/desk.css" />
 <script src="https://unpkg.com/lightweight-charts@4.2.3/dist/lightweight-charts.standalone.production.js"></script>
 </head>
@@ -15,17 +15,21 @@
   <div class="ticker-bar" id="ticker-bar"></div>
   <label class="alert-toggle">
     <input type="checkbox" id="alert-toggle" checked />
-    Alertas
+    <span data-i18n="alerts">Alerts</span>
   </label>
+  <div class="lang-switcher">
+    <button class="lang-btn active" data-lang="en" title="English">🇺🇸 EN</button>
+    <button class="lang-btn" data-lang="pt" title="Português">🇧🇷 PT</button>
+  </div>
   <img src="img/oremet-seal.svg" alt="OrEmet Seal" class="header-seal" />
 </header>
 
 <main class="layout">
 
-  <!-- Coluna principal: gráfico + previsões -->
+  <!-- Col 1: chart + predictions -->
   <div class="col">
     <div class="card">
-      <h2>Gráfico Principal</h2>
+      <h2 data-i18n="mainChart">Main Chart</h2>
       <div class="timeframe-row" id="timeframe-row">
         <button class="tf-btn" data-tf="1m">1m</button>
         <button class="tf-btn" data-tf="5m">5m</button>
@@ -36,88 +40,88 @@
       </div>
       <div id="chart-container"></div>
       <div class="chart-legend">
-        <span class="legend-item tooltip"><span class="legend-swatch bull-swatch"></span>Alta<span class="tip">Vela de Alta (verde): fechamento acima da abertura — compradores dominaram o período.</span></span>
-        <span class="legend-item tooltip"><span class="legend-swatch bear-swatch"></span>Baixa<span class="tip">Vela de Baixa (vermelha): fechamento abaixo da abertura — vendedores dominaram o período.</span></span>
-        <span class="legend-item tooltip"><span class="legend-swatch line-swatch" style="background:#D4AF37"></span>EMA 9<span class="tip">EMA 9 (dourada): Média Móvel Exponencial de curto prazo. Preço acima = força compradora imediata.</span></span>
-        <span class="legend-item tooltip"><span class="legend-swatch line-swatch" style="background:#7EA6D9"></span>EMA 21<span class="tip">EMA 21 (azul): Média Móvel de médio prazo. Cruzamento com EMA 9 sinaliza mudança de tendência (golden/death cross).</span></span>
-        <span class="legend-item tooltip"><span class="legend-swatch line-swatch" style="background:#F3E6B3"></span>SMA 50<span class="tip">SMA 50 (creme): Média de 50 períodos. Referência de tendência de longo prazo — preço acima = território bull.</span></span>
+        <span class="legend-item tooltip" data-i18n-tip="candleUpTip" data-i18n-legend="legendUp"><span class="legend-swatch bull-swatch"></span>Bullish<span class="tip">Bullish candle (green): close above open — buyers dominated the period.</span></span>
+        <span class="legend-item tooltip" data-i18n-tip="candleDownTip" data-i18n-legend="legendDown"><span class="legend-swatch bear-swatch"></span>Bearish<span class="tip">Bearish candle (red): close below open — sellers dominated the period.</span></span>
+        <span class="legend-item tooltip" data-i18n-tip="ema9Tip"><span class="legend-swatch line-swatch" style="background:#D4AF37"></span>EMA 9<span class="tip">EMA 9 (gold): Short-term EMA. Price above = immediate buying strength.</span></span>
+        <span class="legend-item tooltip" data-i18n-tip="ema21Tip"><span class="legend-swatch line-swatch" style="background:#7EA6D9"></span>EMA 21<span class="tip">EMA 21 (blue): Medium-term EMA. Crossover with EMA 9 signals trend change.</span></span>
+        <span class="legend-item tooltip" data-i18n-tip="sma50Tip"><span class="legend-swatch line-swatch" style="background:#F3E6B3"></span>SMA 50<span class="tip">SMA 50 (cream): 50-period SMA. Long-term trend reference — price above = bull territory.</span></span>
       </div>
     </div>
 
     <div class="card">
-      <h2>Previsão de Range</h2>
+      <h2 data-i18n="predictionRange">Range Forecast</h2>
       <div id="predictions-container"></div>
     </div>
 
     <div class="card">
-      <h2>Histórico e Log de Análises</h2>
+      <h2 data-i18n="historyLog">Analysis History & Log</h2>
       <div id="history-container"></div>
     </div>
 
     <div class="card">
-      <h2>Inteligência Externa</h2>
+      <h2 data-i18n="externalIntelligence">External Intelligence</h2>
       <div class="intel-grid" id="intelligence-container"></div>
     </div>
 
     <div class="card">
-      <h2>Market Intelligence — Notícias</h2>
+      <h2 data-i18n="marketNews">Market Intelligence — News</h2>
       <div id="news-container"></div>
     </div>
   </div>
 
-  <!-- Coluna 2: indicadores + S/R -->
+  <!-- Col 2: indicators + S/R -->
   <div class="col">
     <div class="card">
-      <h2>Indicadores Técnicos</h2>
+      <h2 data-i18n="technicalIndicators">Technical Indicators</h2>
       <div id="indicators-container"></div>
     </div>
 
     <div class="card">
-      <h2>Suporte &amp; Resistência</h2>
+      <h2 data-i18n="supportResistance">Support &amp; Resistance</h2>
       <div id="sr-container"></div>
     </div>
 
     <div class="card">
-      <h2>Correlatos BTC (Danelfin)</h2>
+      <h2 data-i18n="btcCorrelates">BTC Correlates (Danelfin)</h2>
       <div class="danelfin-grid" id="danelfin-container"></div>
     </div>
   </div>
 
-  <!-- Coluna 3: chat com Claude + conectores de decisão + glossário -->
+  <!-- Col 3: AI chat + connectors + glossary -->
   <div class="col">
     <div class="card chat-card">
-      <h2>Chat com MarketDesk AI</h2>
+      <h2 data-i18n="chatTitle">Chat with MarketDesk AI</h2>
       <div id="chat-log" class="chat-log"></div>
-      <div id="chat-typing" class="chat-typing">MarketDesk AI está digitando...</div>
+      <div id="chat-typing" class="chat-typing" data-i18n="chatTyping">MarketDesk AI is typing...</div>
       <div id="chat-chips" class="chat-chips"></div>
       <div class="chat-input-row">
-        <input id="chat-input" type="text" placeholder="Pergunte sobre o mercado..." />
-        <button id="chat-send">Enviar</button>
+        <input id="chat-input" type="text" data-i18n-placeholder="chatPlaceholder" placeholder="Ask about the market..." />
+        <button id="chat-send" data-i18n="chatSend">Send</button>
       </div>
     </div>
 
     <div class="card">
-      <h2>Conectores de Decisão</h2>
+      <h2 data-i18n="decisionConnectors">Decision Connectors</h2>
       <div id="connectors-container"></div>
     </div>
 
     <div class="card">
-      <h2>TrendSpider Webhook</h2>
+      <h2 data-i18n="trendspiderTitle">TrendSpider Webhook</h2>
       <div class="ts-config">
-        <input id="trendspider-url" type="text" placeholder="https://...trendspider webhook URL" />
-        <label class="alert-toggle"><input type="checkbox" id="trendspider-enabled" /> Ativo</label>
+        <input id="trendspider-url" type="text" data-i18n-placeholder="tsPlaceholder" placeholder="https://...trendspider webhook URL" />
+        <label class="alert-toggle"><input type="checkbox" id="trendspider-enabled" /> <span data-i18n="tsActive">Active</span></label>
         <div class="ts-buttons">
-          <button id="trendspider-save">Salvar</button>
-          <button id="trendspider-test">Testar conexão</button>
+          <button id="trendspider-save" data-i18n="tsSave">Save</button>
+          <button id="trendspider-test" data-i18n="tsTest">Test connection</button>
         </div>
-        <p class="indicator-explain">Configure o TrendSpider em Settings &gt; Webhooks com a URL: <code>{app_url}/webhooks/trendspider</code></p>
+        <p class="indicator-explain"><span data-i18n="tsInstructions">Configure TrendSpider in Settings &gt; Webhooks with URL:</span> <code>{app_url}/webhooks/trendspider</code></p>
       </div>
       <div id="trendspider-log"></div>
     </div>
 
     <div class="card">
       <details class="glossary" id="glossary-container" open>
-        <summary>Aprenda o mercado</summary>
+        <summary data-i18n="learnSummary">Learn the Market</summary>
         <div id="glossary-list"></div>
       </details>
     </div>
@@ -128,24 +132,22 @@
 <div id="toast-container"></div>
 
 <footer class="disclaimer">
-  ⚠️ Esta ferramenta é educacional. Projeções são baseadas em análise técnica histórica e não constituem conselho financeiro. Opere sempre com gestão de risco adequada.
+  <span data-i18n="disclaimer">⚠️ This tool is for educational purposes. Projections are based on historical technical analysis and do not constitute financial advice. Always trade with proper risk management.</span>
 </footer>
 
 <script>
-  // Aponte para o backend escolhido: Cloudflare Worker ou servidor Oracle/Node.
-  // Exemplo Cloudflare: "https://marketdesk.<seu-subdominio>.workers.dev"
-  // Exemplo Oracle:      "https://marketdesk.yourdomain.com"
   window.MARKETDESK_CONFIG = {
     API_BASE: window.location.origin,
     WS_URL: (window.location.protocol === 'https:' ? 'wss://' : 'ws://') + window.location.host + '/ws',
   };
 </script>
-<script src="js/glossary.js?v=3"></script>
-<script src="js/indicators.js?v=3"></script>
-<script src="js/predictions.js?v=3"></script>
-<script src="js/chart.js?v=3"></script>
-<script src="js/app.js?v=3"></script>
-<script src="js/chat.js?v=3"></script>
-<script src="js/connectors.js?v=3"></script>
+<script src="js/i18n.js?v=4"></script>
+<script src="js/glossary.js?v=4"></script>
+<script src="js/indicators.js?v=4"></script>
+<script src="js/predictions.js?v=4"></script>
+<script src="js/chart.js?v=4"></script>
+<script src="js/app.js?v=4"></script>
+<script src="js/chat.js?v=4"></script>
+<script src="js/connectors.js?v=4"></script>
 </body>
 </html>
