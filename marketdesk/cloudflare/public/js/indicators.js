@@ -81,6 +81,7 @@ function renderIndicators(data) {
 
   renderSupportResistance(data.pivots, data.price);
   renderConnectors(data);
+  renderMarketStructure(data.marketStructure);
 }
 
 function renderSupportResistance(pivots, price) {
@@ -114,6 +115,41 @@ function renderSupportResistance(pivots, price) {
         }).join('')}
       </tbody>
     </table>
+  `;
+}
+
+function renderMarketStructure(ms) {
+  const container = document.getElementById('ms-container');
+  if (!container) return;
+  if (!ms) { container.innerHTML = `<p class="panel-message">${t('loadingIndicators')}</p>`; return; }
+
+  const scorePct = ((ms.score + 5) / 10) * 100; // map -5..5 to 0..100%
+  const fillColor = ms.bias === 'bullish' ? 'var(--bull)' : ms.bias === 'bearish' ? 'var(--bear)' : 'var(--neutral)';
+  const scoreLabel = ms.bias === 'bullish' ? t('bullish') : ms.bias === 'bearish' ? t('bearish') : t('neutral');
+  const sign = ms.score > 0 ? '+' : '';
+
+  const breakdownHtml = ms.scoreBreakdown.length
+    ? ms.scoreBreakdown.map((b) => `
+        <div class="ms-breakdown-item ${b.value > 0 ? 'positive' : b.value < 0 ? 'negative' : ''}">
+          <span>${b.label}</span>
+        </div>`).join('')
+    : '';
+
+  container.innerHTML = `
+    <div class="ms-score-bar">
+      <div>
+        <div class="ms-score-value ${ms.bias}">${sign}${ms.score}</div>
+        <div class="ms-score-label">/ 5</div>
+      </div>
+      <div style="flex:1">
+        <div class="ms-score-track">
+          <div class="ms-score-fill" style="width:${scorePct}%;background:${fillColor}"></div>
+        </div>
+        <div style="font-size:11px;color:var(--text-secondary);margin-top:3px">${scoreLabel}</div>
+      </div>
+    </div>
+    ${ms.primaryEvent ? `<div class="ms-primary-event ${ms.bias}">${ms.primaryEvent.message.replace(/\n/g, '<br>')}</div>` : ''}
+    ${breakdownHtml ? `<div class="ms-breakdown">${breakdownHtml}</div>` : ''}
   `;
 }
 

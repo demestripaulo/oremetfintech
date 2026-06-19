@@ -4,11 +4,34 @@ function biasClass(bias) {
   return '';
 }
 
+function getTimeWindow(interval) {
+  const TZ_OFFSET_MS = -4 * 3600 * 1000; // EDT (UTC-4)
+  const d = new Date(Date.now() + TZ_OFFSET_MS);
+  const h = d.getUTCHours();
+  const m = d.getUTCMinutes();
+  const pad = (n) => String(n).padStart(2, '0');
+  const fmt = (hh, mm) => {
+    const ap = hh >= 12 ? 'PM' : 'AM';
+    return `${hh % 12 || 12}:${pad(mm)} ${ap}`;
+  };
+  if (interval === '15min') {
+    const s = Math.floor(m / 15) * 15;
+    const e = s + 15;
+    return `${fmt(h, s)} → ${fmt(e >= 60 ? h + 1 : h, e >= 60 ? e - 60 : e)} ET`;
+  }
+  if (interval === '1h') {
+    return `→ ${fmt(h + 1, 0)} ET`;
+  }
+  return '→ 5:00 PM ET';
+}
+
 function renderPredictionCard(p) {
   let label;
   if (p.interval === '15min') label = t('next15min');
   else if (p.interval === '1h') label = t('nextHour');
   else label = `${t('dailyClose')}${p.kalshiTarget ? ' — ' + p.kalshiTarget : ''}`;
+  const timeWindow = getTimeWindow(p.interval);
+  label = `${label} · ${timeWindow}`;
 
   const biasKey = p.bias.toUpperCase();
   const biasTip = (typeof withTooltip === 'function') ? withTooltip(t(p.bias) || biasKey, biasKey) : biasKey;

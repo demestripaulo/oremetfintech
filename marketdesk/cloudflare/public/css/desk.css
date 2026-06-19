@@ -391,7 +391,62 @@ footer.disclaimer {
   cursor: pointer;
 }
 
-/* ---------- Danelfin panel ---------- */
+/* ---------- Market Structure ---------- */
+.ms-score-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+  padding: 10px;
+  background: var(--surface);
+  border-radius: 6px;
+  border: 1px solid var(--border);
+}
+.ms-score-value {
+  font-size: 26px;
+  font-weight: 700;
+  font-family: 'JetBrains Mono', monospace;
+  min-width: 38px;
+  line-height: 1;
+}
+.ms-score-value.bullish { color: var(--bull); }
+.ms-score-value.bearish { color: var(--bear); }
+.ms-score-value.neutral { color: var(--neutral); }
+.ms-score-label { font-size: 10px; color: var(--text-secondary); margin-top: 2px; }
+.ms-score-track {
+  flex: 1;
+  height: 6px;
+  background: var(--card-elevated);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.ms-score-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.4s ease;
+}
+.ms-primary-event {
+  padding: 8px 10px;
+  border-left: 3px solid var(--gold);
+  background: rgba(212,175,55,0.06);
+  border-radius: 0 6px 6px 0;
+  font-size: 12px;
+  line-height: 1.6;
+  margin-bottom: 10px;
+}
+.ms-primary-event.bearish { border-left-color: var(--bear); background: rgba(201,76,76,0.06); }
+.ms-primary-event.bullish { border-left-color: var(--bull); background: rgba(0,200,118,0.05); }
+.ms-breakdown { display: flex; flex-direction: column; gap: 2px; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border); }
+.ms-breakdown-item {
+  display: flex;
+  font-size: 11px;
+  color: var(--text-secondary);
+  padding: 2px 0;
+}
+.ms-breakdown-item.positive { color: var(--bull); }
+.ms-breakdown-item.negative { color: var(--bear); }
+
+/* ---------- Danelfin panel (kept for future use) ---------- */
 .danelfin-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
 .danelfin-card { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 8px; }
 .danelfin-card.muted { border-style: dashed; }
@@ -449,29 +504,6 @@ footer.disclaimer {
 }
 .ask-claude-btn:hover { border-color: var(--gold); color: var(--text); }
 
-/* ---------- TrendSpider panel ---------- */
-.ts-config { display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; }
-.ts-config input[type="text"] {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  color: var(--text);
-  padding: 6px 8px;
-  font-size: 12px;
-}
-.ts-buttons { display: flex; gap: 8px; }
-.ts-buttons button {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  color: var(--text);
-  border-radius: 6px;
-  padding: 6px 10px;
-  font-size: 12px;
-  cursor: pointer;
-}
-.ts-buttons button:hover { border-color: var(--gold); color: var(--gold-soft); }
-.ts-log-item { font-size: 11px; padding: 4px 0; border-bottom: 1px solid var(--border); display: flex; gap: 8px; align-items: flex-start; }
-
 /* ---------- Toast / alert ---------- */
 #toast-container {
   position: fixed;
@@ -519,7 +551,6 @@ input:focus, button:focus-visible {
   main.layout { padding: 10px; gap: 10px; }
   .card { padding: 12px; }
   #chart-container { height: 340px; }
-  .danelfin-grid, .intel-grid { grid-template-columns: 1fr; }
+  .intel-grid { grid-template-columns: 1fr; }
   .timeframe-row { flex-wrap: wrap; }
-  .chat-input-row { flex-direction: column; }
 }

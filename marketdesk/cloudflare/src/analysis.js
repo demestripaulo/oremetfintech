@@ -226,6 +226,7 @@ export function buildIndicatorPanel(candles, lang = 'en') {
       : 'Compara o volume atual com a média das últimas 20 velas; volume alto confirma a força do movimento.' },
     pattern: { ...pattern, explanation: patternExplanation(pattern.name, isEn) },
     pivots: calculatePivotPoints(candles),
+    marketStructure: detectMarketStructure(candles, calculatePivotPoints(candles), atr, lang),
   };
 }
 
@@ -271,6 +272,161 @@ function patternExplanation(name, isEn) {
   const entry = map[name];
   if (entry) return isEn ? entry[0] : entry[1];
   return isEn ? 'Standard candle — no special reversal pattern.' : 'Vela padrão sem configuração especial de reversão.';
+}
+
+// Checks whether price has had a significant interaction with a single S/R level
+// in the last LOOKBACK candles.
+function checkLevelInteraction(candles, level, tolerance, levelName, isSupport, isEn) {
+  const LOOKBACK = Math.min(10, candles.length - 1);
+  const lookback = candles.slice(-LOOKBACK - 1);
+  const last = lookback[lookback.length - 1];
+  const price = last.close;
+
+  const aboveLevel = price > level + tolerance;
+  const belowLevel = price < level - tolerance;
+  const nearLevel = Math.abs(price - level) <= tolerance * 2;
+
+  let recentBreakDown = false;
+  let recentBreakUp = false;
+  for (let i = 1; i < lookback.length; i++) {
+    const p = lookback[i - 1];
+    const c = lookback[i];
+    if (!recentBreakDown && p.close > level + tolerance && c.close < level - tolerance) recentBreakDown = true;
+    if (!recentBreakUp && p.close < level - tolerance && c.close > level + tolerance) recentBreakUp = true;
+  }
+
+  if (isSupport) {
+    if (recentBreakDown) {
+      if (aboveLevel) {
+        return { pattern: 'FALSE_BREAKDOWN', level: levelName, value: level, scoreContrib: 2,
+          shortLabel: isEn ? `Recovered ${levelName}` : `Recuperou ${levelName}`,
+          bias: 'bullish',
+          message: isEn
+            ? `${levelName} (${level.toFixed(2)}) was breached but price recovered above. Possible false breakdown — bullish signal.`
+            : `${levelName} (${level.toFixed(2)}) foi rompido mas preço recuperou. Possível falso rompimento — sinal altista.` };
+      }
+      if (nearLevel && belowLevel) {
+        return { pattern: 'RETEST_REJECTION', level: levelName, value: level, scoreContrib: -2,
+          shortLabel: isEn ? `Retest rejection at ${levelName}` : `Rejeição no reteste de ${levelName}`,
+          bias: 'bearish',
+          message: isEn
+            ? `${levelName} (${level.toFixed(2)}) broken. Price retesting from below and rejecting.\nIf closes back above ${level.toFixed(2)} → false breakdown.`
+            : `${levelName} (${level.toFixed(2)}) rompido. Preço retestando por baixo e rejeitando.\nSe fechar acima de ${level.toFixed(2)} → falso rompimento.` };
+      }
+      return { pattern: 'SUPPORT_BREAK', level: levelName, value: level, scoreContrib: -2,
+        shortLabel: isEn ? `Lost ${levelName}` : `Perdeu ${levelName}`,
+        bias: 'bearish',
+        message: isEn
+          ? `${levelName} broken at ${level.toFixed(2)}. Awaiting retest.\nIf rejected below ${level.toFixed(2)} → bearish continuation.\nIf recovers above → possible false breakdown.`
+          : `${levelName} rompido em ${level.toFixed(2)}. Aguardando reteste.\nSe rejeitado abaixo de ${level.toFixed(2)} → continuação baixista.\nSe recuperar acima → possível falso rompimento.` };
+    }
+    if (recentBreakUp && aboveLevel) {
+      return { pattern: 'SUPPORT_RECOVERY', level: levelName, value: level, scoreContrib: 2,
+        shortLabel: isEn ? `Recovered ${levelName}` : `Recuperou ${levelName}`,
+        bias: 'bullish',
+        message: isEn
+          ? `Price recovered above ${levelName} (${level.toFixed(2)}). Bullish reversal signal.`
+          : `Preço recuperou acima de ${levelName} (${level.toFixed(2)}). Sinal de reversão altista.` };
+    }
+  } else {
+    if (recentBreakUp) {
+      if (belowLevel) {
+        return { pattern: 'FALSE_BREAKOUT', level: levelName, value: level, scoreContrib: -2,
+          shortLabel: isEn ? `Failed at ${levelName}` : `Falhou em ${levelName}`,
+          bias: 'bearish',
+          message: isEn
+            ? `${levelName} (${level.toFixed(2)}) was breached but price fell back. Possible false breakout — bearish signal.`
+            : `${levelName} (${level.toFixed(2)}) foi rompido mas preço recuou. Possível falso rompimento — sinal baixista.` };
+      }
+      if (nearLevel && aboveLevel) {
+        return { pattern: 'RETEST_FROM_ABOVE', level: levelName, value: level, scoreContrib: 1,
+          shortLabel: isEn ? `Retesting ${levelName} as support` : `Retestando ${levelName} como suporte`,
+          bias: 'bullish',
+          message: isEn
+            ? `${levelName} (${level.toFixed(2)}) broken — retesting as support.\nIf holds → continuation higher.\nIf breaks below → possible false breakout.`
+            : `${levelName} (${level.toFixed(2)}) rompido — retestando como suporte.\nSe sustentar → continuação altista.\nSe romper abaixo → possível falso rompimento.` };
+      }
+      return { pattern: 'RESISTANCE_BREAK', level: levelName, value: level, scoreContrib: 2,
+        shortLabel: isEn ? `Broke ${levelName}` : `Rompeu ${levelName}`,
+        bias: 'bullish',
+        message: isEn
+          ? `${levelName} broken at ${level.toFixed(2)}. Bullish momentum — watch for continuation or retest as support.`
+          : `${levelName} rompido em ${level.toFixed(2)}. Momentum altista — observar continuação ou reteste como suporte.` };
+    }
+    if (nearLevel && !aboveLevel) {
+      const wasRejected = lookback.slice(-5).some((c) => c.high >= level - tolerance && c.close < level - tolerance);
+      if (wasRejected) {
+        return { pattern: 'RESISTANCE_REJECTION', level: levelName, value: level, scoreContrib: -2,
+          shortLabel: isEn ? `Failed at ${levelName}` : `Falhou em ${levelName}`,
+          bias: 'bearish',
+          message: isEn
+            ? `Price tested ${levelName} (${level.toFixed(2)}) but was rejected. Resistance holding.`
+            : `Preço testou ${levelName} (${level.toFixed(2)}) mas foi rejeitado. Resistência segurando.` };
+      }
+    }
+  }
+  return null;
+}
+
+export function detectMarketStructure(candles, pivots, atr, lang = 'en') {
+  if (candles.length < 5) {
+    const msg = lang !== 'pt' ? 'Insufficient data.' : 'Dados insuficientes.';
+    return { score: 0, bias: 'neutral', events: [], scoreBreakdown: [], message: msg, primaryEvent: null };
+  }
+  const tolerance = atr * 0.15;
+  const isEn = lang !== 'pt';
+  let score = 0;
+  const scoreBreakdown = [];
+  const events = [];
+
+  const levels = [
+    { name: 'R2', value: pivots.r2, isSupport: false },
+    { name: 'R1', value: pivots.r1, isSupport: false },
+    { name: 'S1', value: pivots.s1, isSupport: true },
+    { name: 'S2', value: pivots.s2, isSupport: true },
+  ];
+  for (const lvl of levels) {
+    const result = checkLevelInteraction(candles, lvl.value, tolerance, lvl.name, lvl.isSupport, isEn);
+    if (result) {
+      events.push(result);
+      if (result.scoreContrib !== 0) {
+        score += result.scoreContrib;
+        scoreBreakdown.push({ label: `${result.scoreContrib > 0 ? '+' : ''}${result.scoreContrib} ${result.shortLabel}`, value: result.scoreContrib });
+      }
+    }
+  }
+
+  // Volume
+  const volRatioVal = volumeRatio(candles, 20);
+  if (volRatioVal > 1.2) {
+    score += 1;
+    scoreBreakdown.push({ label: isEn ? '+1 Rising volume' : '+1 Volume crescente', value: 1 });
+  }
+
+  // Ascending lows / descending highs (compare first vs last third of recent candles)
+  const W = Math.min(15, candles.length);
+  const struct = candles.slice(-W);
+  const third = Math.max(1, Math.floor(W / 3));
+  const earlyLow = Math.min(...struct.slice(0, third).map((c) => c.low));
+  const lateLow = Math.min(...struct.slice(-third).map((c) => c.low));
+  const earlyHigh = Math.max(...struct.slice(0, third).map((c) => c.high));
+  const lateHigh = Math.max(...struct.slice(-third).map((c) => c.high));
+
+  if (lateLow > earlyLow + tolerance) {
+    score += 1;
+    scoreBreakdown.push({ label: isEn ? '+1 Ascending lows' : '+1 Fundo ascendente', value: 1 });
+  }
+  if (lateHigh < earlyHigh - tolerance) {
+    score -= 1;
+    scoreBreakdown.push({ label: isEn ? '-1 Descending highs' : '-1 Topo descendente', value: -1 });
+  }
+
+  score = Math.max(-5, Math.min(5, score));
+  const bias = score >= 2 ? 'bullish' : score <= -2 ? 'bearish' : 'neutral';
+  const primaryEvent = events.filter((e) => e.scoreContrib !== 0).sort((a, b) => Math.abs(b.scoreContrib) - Math.abs(a.scoreContrib))[0] || null;
+  const message = primaryEvent ? primaryEvent.message
+    : (isEn ? 'No clear structural event near key levels.' : 'Sem evento estrutural claro nos níveis-chave.');
+  return { score, bias, primaryEvent, events, scoreBreakdown, message };
 }
 
 export function round(n, d = 2) {

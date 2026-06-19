@@ -72,7 +72,8 @@ async function handleRequest(request, env) {
   if (url.pathname === '/api/analysis') {
     const symbol = url.searchParams.get('symbol') || 'BTCUSDT';
     const lang = url.searchParams.get('lang') || 'en';
-    const candles = await fetchKlines(symbol, '1m', 200);
+    const interval = url.searchParams.get('interval') || '1m';
+    const candles = await fetchKlines(symbol, interval, 200);
     const indicators = buildIndicatorPanel(candles, lang);
     return json({ symbol, indicators });
   }

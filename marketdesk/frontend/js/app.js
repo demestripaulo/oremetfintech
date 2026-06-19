@@ -129,7 +129,7 @@ async function loadCandles() {
 
 async function loadAnalysis() {
   try {
-    const res = await fetch(`${API_BASE}/api/analysis?symbol=${activeSymbol}&lang=${window.LANG || 'en'}`);
+    const res = await fetch(`${API_BASE}/api/analysis?symbol=${activeSymbol}&interval=${activeTimeframe}&lang=${window.LANG || 'en'}`);
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
     renderIndicators(data.indicators);
@@ -241,7 +241,7 @@ function connectWS() {
       renderTickerBar();
     }
 
-    if (sym === activeSymbol) {
+    if (sym === activeSymbol && activeTimeframe === '1m') {
       chart?.updateLastCandle(tick.candle);
     }
   });
@@ -272,7 +272,7 @@ document.addEventListener('DOMContentLoaded', () => {
       document.querySelectorAll('.tf-btn').forEach((b) => b.classList.remove('active'));
       btn.classList.add('active');
       activeTimeframe = btn.dataset.tf;
-      loadCandles();
+      Promise.allSettled([loadCandles(), loadAnalysis()]);
     });
   });
 

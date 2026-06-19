@@ -180,7 +180,7 @@ export class MarketHub {
           candle.high = Math.max(candle.high, price);
           candle.low = Math.min(candle.low, price);
           candle.close = price;
-          candle.volume += parseFloat(ticker.volume_24h || 0);
+          candle.volume += parseFloat(ticker.last_size || ticker.size || 0);
         }
         this.partialCandles.set(symbol, candle);
 

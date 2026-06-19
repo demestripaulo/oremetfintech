@@ -60,11 +60,6 @@
     </div>
 
     <div class="card">
-      <h2 data-i18n="externalIntelligence">External Intelligence</h2>
-      <div class="intel-grid" id="intelligence-container"></div>
-    </div>
-
-    <div class="card">
       <h2 data-i18n="marketNews">Market Intelligence — News</h2>
       <div id="news-container"></div>
     </div>
@@ -83,41 +78,21 @@
     </div>
 
     <div class="card">
-      <h2 data-i18n="btcCorrelates">BTC Correlates (Danelfin)</h2>
-      <div class="danelfin-grid" id="danelfin-container"></div>
+      <h2 data-i18n="marketStructure">Market Structure</h2>
+      <div id="ms-container"></div>
     </div>
   </div>
 
-  <!-- Col 3: AI chat + connectors + glossary -->
+  <!-- Col 3: connectors + intelligence + glossary -->
   <div class="col">
-    <div class="card chat-card">
-      <h2 data-i18n="chatTitle">Chat with MarketDesk AI</h2>
-      <div id="chat-log" class="chat-log"></div>
-      <div id="chat-typing" class="chat-typing" data-i18n="chatTyping">MarketDesk AI is typing...</div>
-      <div id="chat-chips" class="chat-chips"></div>
-      <div class="chat-input-row">
-        <input id="chat-input" type="text" data-i18n-placeholder="chatPlaceholder" placeholder="Ask about the market..." />
-        <button id="chat-send" data-i18n="chatSend">Send</button>
-      </div>
-    </div>
-
     <div class="card">
       <h2 data-i18n="decisionConnectors">Decision Connectors</h2>
       <div id="connectors-container"></div>
     </div>
 
     <div class="card">
-      <h2 data-i18n="trendspiderTitle">TrendSpider Webhook</h2>
-      <div class="ts-config">
-        <input id="trendspider-url" type="text" data-i18n-placeholder="tsPlaceholder" placeholder="https://...trendspider webhook URL" />
-        <label class="alert-toggle"><input type="checkbox" id="trendspider-enabled" /> <span data-i18n="tsActive">Active</span></label>
-        <div class="ts-buttons">
-          <button id="trendspider-save" data-i18n="tsSave">Save</button>
-          <button id="trendspider-test" data-i18n="tsTest">Test connection</button>
-        </div>
-        <p class="indicator-explain"><span data-i18n="tsInstructions">Configure TrendSpider in Settings &gt; Webhooks with URL:</span> <code>{app_url}/webhooks/trendspider</code></p>
-      </div>
-      <div id="trendspider-log"></div>
+      <h2 data-i18n="externalIntelligence">External Intelligence</h2>
+      <div class="intel-grid" id="intelligence-container"></div>
     </div>
 
     <div class="card">
@@ -148,7 +123,6 @@
 <script src="js/predictions.js?v=4"></script>
 <script src="js/chart.js?v=4"></script>
 <script src="js/app.js?v=4"></script>
-<script src="js/chat.js?v=4"></script>
 <script src="js/connectors.js?v=4"></script>
 </body>
 </html>

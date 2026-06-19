@@ -17,6 +17,7 @@ const I18N = {
     chatTitle: 'Chat with MarketDesk AI',
     decisionConnectors: 'Decision Connectors',
     trendspiderTitle: 'TrendSpider Webhook',
+    marketStructure: 'Market Structure',
     learnMarket: 'Learn the Market',
     // Badges
     buy: 'BUY', sell: 'SELL', neutral: 'NEUTRAL',
@@ -123,6 +124,7 @@ const I18N = {
     chatTitle: 'Chat com MarketDesk AI',
     decisionConnectors: 'Conectores de Decisão',
     trendspiderTitle: 'TrendSpider Webhook',
+    marketStructure: 'Estrutura de Mercado',
     learnMarket: 'Aprenda o mercado',
     // Badges
     buy: 'COMPRA', sell: 'VENDA', neutral: 'NEUTRO',
