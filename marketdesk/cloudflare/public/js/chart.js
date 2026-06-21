@@ -61,6 +61,7 @@ class MarketChart {
     this.ema9Series.setData(emaLine(candles, 9, this.tzOffset));
     this.ema21Series.setData(emaLine(candles, 21, this.tzOffset));
     this.sma50Series.setData(smaLine(candles, 50, this.tzOffset));
+    this.chart.timeScale().fitContent();
   }
 
   updateLastCandle(candle) {

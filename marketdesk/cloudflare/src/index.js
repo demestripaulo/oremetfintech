@@ -2,21 +2,10 @@ import { fetchKlines, fetch24hTicker, SYMBOLS } from './binance.js';
 import { buildIndicatorPanel } from './analysis.js';
 import { predictRange } from './predictions.js';
 import {
-  getDanelfinPanel,
-  getDanelfinScore,
   getFearGreedIndex,
   getExternalIntelligence,
   getMarketNews,
 } from './connectors.js';
-import {
-  setTrendspiderConfig,
-  getTrendspiderConfig,
-  getLog as getTrendspiderLog,
-  testConnection as testTrendspiderConnection,
-  handleInboundWebhook,
-  sendAlertToTrendspider,
-} from './trendspider.js';
-import { buildSystemPrompt, buildSnapshot, resolveToolUse, streamFinalAnswer } from './chat.js';
 
 export { MarketHub } from './websocket.js';
 
@@ -65,15 +54,15 @@ async function handleRequest(request, env) {
     const symbol = url.searchParams.get('symbol') || 'BTCUSDT';
     const interval = url.searchParams.get('interval') || '1m';
     const limit = Math.min(500, parseInt(url.searchParams.get('limit') || '200', 10));
-    const candles = await fetchKlines(symbol, interval, limit);
-    return json({ symbol, interval, candles });
+    const { candles, source } = await fetchKlines(symbol, interval, limit);
+    return json({ symbol, interval, candles, source });
   }
 
   if (url.pathname === '/api/analysis') {
     const symbol = url.searchParams.get('symbol') || 'BTCUSDT';
     const lang = url.searchParams.get('lang') || 'en';
     const interval = url.searchParams.get('interval') || '1m';
-    const candles = await fetchKlines(symbol, interval, 200);
+    const { candles } = await fetchKlines(symbol, interval, 200);
     const indicators = buildIndicatorPanel(candles, lang);
     return json({ symbol, indicators });
   }
@@ -81,7 +70,7 @@ async function handleRequest(request, env) {
   if (url.pathname === '/api/predictions') {
     const symbol = url.searchParams.get('symbol') || 'BTCUSDT';
     const lang = url.searchParams.get('lang') || 'en';
-    const candles = await fetchKlines(symbol, '1m', 200);
+    const { candles } = await fetchKlines(symbol, '1m', 200);
     const fifteenMin = predictRange(candles, '15min', lang);
     const oneHour = predictRange(candles, '1h', lang);
     const daily = predictRange(candles, 'daily', lang);
@@ -97,10 +86,6 @@ async function handleRequest(request, env) {
   }
 
   // ---------- External connectors ----------
-  if (url.pathname === '/api/connectors/danelfin') {
-    return json(await getDanelfinPanel(env.DANELFIN_API_KEY));
-  }
-
   if (url.pathname === '/api/connectors/fear-greed') {
     return json(await getFearGreedIndex());
   }
@@ -113,35 +98,6 @@ async function handleRequest(request, env) {
     const asset = url.searchParams.get('asset');
     const items = await getMarketNews(asset);
     return json({ items });
-  }
-
-  // ---------- TrendSpider webhooks ----------
-  if (url.pathname === '/webhooks/trendspider' && request.method === 'POST') {
-    const payload = await request.json().catch(() => ({}));
-    const result = await handleInboundWebhook(env, payload);
-    await broadcastToHub(env, { type: 'system_event', eventType: 'trendspider', ...result, payload });
-    return json({ received: true, ...result });
-  }
-
-  if (url.pathname === '/api/trendspider/config') {
-    if (request.method === 'POST') {
-      const body = await request.json().catch(() => ({}));
-      return json(await setTrendspiderConfig(env, body));
-    }
-    return json(await getTrendspiderConfig(env));
-  }
-
-  if (url.pathname === '/api/trendspider/log') {
-    return json({ log: await getTrendspiderLog(env) });
-  }
-
-  if (url.pathname === '/api/trendspider/test' && request.method === 'POST') {
-    return json(await testTrendspiderConnection(env));
-  }
-
-  // ---------- AI Chat (Workers AI, streaming with tool use) ----------
-  if (url.pathname === '/api/chat' && request.method === 'POST') {
-    return handleChat(request, env);
   }
 
   // Anything else (/, /css/*, /js/*, ...) is the static frontend bundle.
@@ -167,7 +123,7 @@ export default {
   async scheduled(event, env, ctx) {
     for (const symbol of SYMBOLS) {
       try {
-        const candles = await fetchKlines(symbol, '1m', 200);
+        const { candles } = await fetchKlines(symbol, '1m', 200);
         const indicators = buildIndicatorPanel(candles);
         const fifteenMin = predictRange(candles, '15min');
         const oneHour = predictRange(candles, '1h');
@@ -180,18 +136,6 @@ export default {
           daily,
           priceAtGeneration: candles[candles.length - 1].close,
         });
-
-        if (indicators.pattern.bias !== 'neutral') {
-          await sendAlertToTrendspider(env, {
-            source: 'marketdesk',
-            symbol,
-            alert_type: 'pattern_detected',
-            pattern: indicators.pattern.name,
-            bias: indicators.pattern.bias,
-            price: indicators.price,
-            timestamp: new Date().toISOString(),
-          });
-        }
       } catch (err) {
         console.error('scheduled analysis failed for', symbol, err);
       }
@@ -213,85 +157,4 @@ async function persistPredictionLog(env, record) {
 async function readPredictionLog(env, symbol) {
   const raw = await env.MARKET_KV.get(`log:${symbol}`);
   return raw ? JSON.parse(raw) : [];
-}
-
-async function broadcastToHub(env, payload) {
-  const id = env.MARKET_HUB.idFromName('global');
-  const stub = env.MARKET_HUB.get(id);
-  await stub.fetch('https://internal/broadcast', {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  });
-}
-
-async function buildToolExecutors(env, defaultSymbol) {
-  return {
-    get_current_price: async ({ symbol } = {}) => {
-      const sym = (symbol || defaultSymbol).toUpperCase();
-      const candles = await fetchKlines(sym, '1m', 200);
-      return { symbol: sym, ...buildIndicatorPanel(candles) };
-    },
-    get_danelfin_score: async ({ ticker }) => getDanelfinScore(ticker, env.DANELFIN_API_KEY),
-    get_fear_greed: async () => getFearGreedIndex(),
-    get_price_prediction: async ({ interval } = {}) => {
-      const candles = await fetchKlines(defaultSymbol, '1m', 200);
-      return predictRange(candles, interval === '4h' ? '1h' : interval || '15min');
-    },
-    get_support_resistance: async () => {
-      const candles = await fetchKlines(defaultSymbol, '1m', 200);
-      return buildIndicatorPanel(candles).pivots;
-    },
-    get_recent_news: async ({ asset } = {}) => getMarketNews(asset),
-  };
-}
-
-async function handleChat(request, env) {
-  if (!env.AI) {
-    return json({ error: 'Workers AI não está disponível neste Worker (binding "AI" ausente).' }, 500);
-  }
-  try {
-    const { messages, symbol = 'BTCUSDT' } = await request.json();
-    const candles = await fetchKlines(symbol, '1m', 200);
-    const indicators = buildIndicatorPanel(candles);
-    const predictions = {
-      fifteenMin: predictRange(candles, '15min'),
-      oneHour: predictRange(candles, '1h'),
-    };
-    const snapshot = buildSnapshot(indicators, predictions, symbol);
-    const system = buildSystemPrompt(snapshot);
-    const toolExecutors = await buildToolExecutors(env, symbol);
-
-    const { messages: resolvedMessages, toolTrace } = await resolveToolUse({
-      ai: env.AI,
-      system,
-      messages,
-      toolExecutors,
-    });
-
-    const encoder = new TextEncoder();
-    const stream = new ReadableStream({
-      async start(controller) {
-        controller.enqueue(encoder.encode(`event: tool_trace\ndata: ${JSON.stringify(toolTrace)}\n\n`));
-        try {
-          await streamFinalAnswer({
-            ai: env.AI,
-            system,
-            messages: resolvedMessages,
-            onChunk: (line) => controller.enqueue(encoder.encode(line + '\n')),
-          });
-        } catch (err) {
-          controller.enqueue(encoder.encode(`event: error\ndata: ${JSON.stringify({ error: err.message })}\n\n`));
-        }
-        controller.close();
-      },
-    });
-
-    return cors(
-      new Response(stream, {
-        headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' },
-      })
-    );
-  } catch (err) {
-    return json({ error: err.message }, 502);
-  }
 }

@@ -119,6 +119,8 @@ async function loadCandles() {
     }
     chart.setCandles(data.candles);
     clearChartMessage();
+    const srcEl = $('chart-source');
+    if (srcEl) srcEl.textContent = data.source ? `via ${data.source}` : '';
     return data.candles;
   } catch (err) {
     console.error('Failed to load candles', err);

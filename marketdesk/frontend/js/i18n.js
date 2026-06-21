@@ -13,10 +13,7 @@ const I18N = {
     marketNews: 'Market Intelligence — News',
     technicalIndicators: 'Technical Indicators',
     supportResistance: 'Support & Resistance',
-    btcCorrelates: 'BTC Correlates (Danelfin)',
-    chatTitle: 'Chat with MarketDesk AI',
     decisionConnectors: 'Decision Connectors',
-    trendspiderTitle: 'TrendSpider Webhook',
     marketStructure: 'Market Structure',
     learnMarket: 'Learn the Market',
     // Badges
@@ -67,34 +64,11 @@ const I18N = {
     ema21Tip: 'EMA 21 (blue): Medium-term EMA. Crossover with EMA 9 signals trend change.',
     sma50Tip: 'SMA 50 (cream): 50-period SMA. Long-term trend — price above = bull territory.',
     legendUp: 'Bullish', legendDown: 'Bearish',
-    // Chat
-    chatPlaceholder: 'Ask about the market...', chatSend: 'Send',
-    chatTyping: 'MarketDesk AI is typing...',
-    // TrendSpider
-    tsSave: 'Save', tsTest: 'Test connection',
-    tsPlaceholder: 'https://...trendspider webhook URL',
-    tsActive: 'Active',
-    tsInstructions: 'Configure TrendSpider in Settings > Webhooks with URL:',
     // Footer
     disclaimer: '⚠️ This tool is for educational purposes. Projections are based on historical technical analysis and do not constitute financial advice. Always trade with proper risk management.',
     // Glossary
     learnSummary: 'Learn the Market',
-    // Chat
-    chatYou: 'You', chatAI: 'MarketDesk AI',
-    chatBadge: 'Educational analysis',
-    chatCopy: 'Copy',
-    chatAskAI: 'Ask AI',
-    chatConnectErr: 'Failed to connect to chat: ',
-    // Chat quick chips
-    chip1: 'Why this move?', chip2: 'Explain RSI',
-    chip3: 'Range next 2h', chip4: 'Current pattern',
-    chip5: 'Critical levels', chip6: 'Day summary',
     // Connectors / external
-    loadingBtcCorr: 'Loading BTC correlates...',
-    danelfinPending: 'Setup pending',
-    danelfinMsg: 'Danelfin API key not configured. BTC correlates will appear when the key is added to the Worker.',
-    danelfinNone: 'No BTC correlates available at the moment.',
-    danelfinNoScore: 'No score estimated.',
     socialSentiment: 'Social Sentiment',
     sentimentSrc: 'Positive votes (CoinGecko)',
     onChain: 'On-chain (Glassnode)',
@@ -104,9 +78,6 @@ const I18N = {
     externalUnavailable: 'External intelligence unavailable: ',
     noNews: 'No relevant news in the last 2 hours.',
     newsUnavailable: 'News feed unavailable: ',
-    tsLogEmpty: 'No messages yet.',
-    tsTestOk: 'TrendSpider connection OK',
-    tsTestFail: 'Failed: ',
   },
 
   pt: {
@@ -120,10 +91,7 @@ const I18N = {
     marketNews: 'Market Intelligence — Notícias',
     technicalIndicators: 'Indicadores Técnicos',
     supportResistance: 'Suporte & Resistência',
-    btcCorrelates: 'Correlatos BTC (Danelfin)',
-    chatTitle: 'Chat com MarketDesk AI',
     decisionConnectors: 'Conectores de Decisão',
-    trendspiderTitle: 'TrendSpider Webhook',
     marketStructure: 'Estrutura de Mercado',
     learnMarket: 'Aprenda o mercado',
     // Badges
@@ -174,34 +142,11 @@ const I18N = {
     ema21Tip: 'EMA 21 (azul): Média Móvel de médio prazo. Cruzamento com EMA 9 sinaliza mudança de tendência.',
     sma50Tip: 'SMA 50 (creme): Média de 50 períodos. Referência de longo prazo — preço acima = território bull.',
     legendUp: 'Alta', legendDown: 'Baixa',
-    // Chat
-    chatPlaceholder: 'Pergunte sobre o mercado...', chatSend: 'Enviar',
-    chatTyping: 'MarketDesk AI está digitando...',
-    // TrendSpider
-    tsSave: 'Salvar', tsTest: 'Testar conexão',
-    tsPlaceholder: 'https://...trendspider webhook URL',
-    tsActive: 'Ativo',
-    tsInstructions: 'Configure o TrendSpider em Settings > Webhooks com a URL:',
     // Footer
     disclaimer: '⚠️ Esta ferramenta é educacional. Projeções são baseadas em análise técnica histórica e não constituem conselho financeiro. Opere sempre com gestão de risco adequada.',
     // Glossary
     learnSummary: 'Aprenda o mercado',
-    // Chat
-    chatYou: 'Você', chatAI: 'MarketDesk AI',
-    chatBadge: 'Análise educacional',
-    chatCopy: 'Copiar',
-    chatAskAI: 'Perguntar à IA',
-    chatConnectErr: 'Erro ao conectar ao chat: ',
-    // Chat quick chips
-    chip1: 'Por que esse movimento?', chip2: 'Explica o RSI',
-    chip3: 'Range das próximas 2h', chip4: 'Padrão atual',
-    chip5: 'Níveis críticos', chip6: 'Resumo do dia',
     // Connectors / external
-    loadingBtcCorr: 'Verificando correlatos BTC...',
-    danelfinPending: 'Configuração pendente',
-    danelfinMsg: 'Danelfin API key não configurada. Os correlatos BTC serão exibidos quando a chave for adicionada ao Worker.',
-    danelfinNone: 'Nenhum correlato BTC disponível no momento.',
-    danelfinNoScore: 'Nenhum score foi estimado.',
     socialSentiment: 'Sentimento social',
     sentimentSrc: 'Votos positivos (CoinGecko)',
     onChain: 'On-chain (Glassnode)',
@@ -211,9 +156,6 @@ const I18N = {
     externalUnavailable: 'Inteligência externa indisponível: ',
     noNews: 'Nenhuma notícia relevante nas últimas 2 horas.',
     newsUnavailable: 'Feed de notícias indisponível: ',
-    tsLogEmpty: 'Sem mensagens ainda.',
-    tsTestOk: 'Conexão TrendSpider OK',
-    tsTestFail: 'Falha: ',
   },
 };
 
@@ -233,11 +175,8 @@ function setLang(lang) {
   // Re-render dynamic panels
   if (typeof loadAll === 'function') loadAll();
   if (typeof renderGlossary === 'function') renderGlossary();
-  if (typeof renderChatChips === 'function') renderChatChips();
   if (typeof loadIntelligencePanel === 'function') loadIntelligencePanel();
-  if (typeof loadDanelfinPanel === 'function') loadDanelfinPanel();
   if (typeof loadNewsFeed === 'function') loadNewsFeed();
-  if (typeof refreshTrendspiderLog === 'function') refreshTrendspiderLog();
   document.querySelectorAll('.lang-btn').forEach((b) => {
     b.classList.toggle('active', b.dataset.lang === lang);
   });

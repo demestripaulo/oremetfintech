@@ -103,29 +103,27 @@ export async function fetchKlines(symbol, interval = '1m', limit = 200) {
   const spec = INTERVALS[interval] || INTERVALS['1m'];
   const cacheKey = `klines:${sym}:${interval}:${limit}`;
   const cached = cacheGet(cacheKey);
-  if (cached) return cached;
+  if (cached) return cached; // already a { candles, source } object
 
-  // Ordered, never-throwing source chain. Reliable-from-Workers first.
-  const sources = [];
-  if (COINBASE_PRODUCT[sym]) sources.push(() => fetchCoinbaseKlines(sym, spec.coinbaseSec, limit));
-  sources.push(() => fetchBinanceKlines(BINANCE_REST, sym, spec.binance, limit));
-  sources.push(() => fetchBinanceKlines(BINANCE_US_REST, sym, spec.binance, limit));
-  if (KRAKEN_PAIR[sym]) sources.push(() => fetchKrakenKlines(sym, spec.krakenMin, limit));
-  sources.push(() => fetchCoinGeckoKlines(sym, limit));
+  const sourceEntries = [];
+  if (COINBASE_PRODUCT[sym]) sourceEntries.push({ name: 'Coinbase', fn: () => fetchCoinbaseKlines(sym, spec.coinbaseSec, limit) });
+  sourceEntries.push({ name: 'Binance', fn: () => fetchBinanceKlines(BINANCE_REST, sym, spec.binance, limit) });
+  sourceEntries.push({ name: 'Binance.US', fn: () => fetchBinanceKlines(BINANCE_US_REST, sym, spec.binance, limit) });
+  if (KRAKEN_PAIR[sym]) sourceEntries.push({ name: 'Kraken', fn: () => fetchKrakenKlines(sym, spec.krakenMin, limit) });
+  sourceEntries.push({ name: 'CoinGecko', fn: () => fetchCoinGeckoKlines(sym, limit) });
 
-  for (const source of sources) {
+  for (const { name, fn } of sourceEntries) {
     try {
-      const candles = normalizeCandles(await source(), limit);
+      const candles = normalizeCandles(await fn(), limit);
       if (candles.length > 0) {
-        cacheSet(cacheKey, candles);
-        return candles;
+        const result = { candles, source: name };
+        cacheSet(cacheKey, result);
+        return result;
       }
-    } catch {
-      // advance to next source
-    }
+    } catch { /* advance to next source */ }
   }
 
-  throw new Error('Dados de candles indisponíveis em todas as fontes (Coinbase, Binance, Kraken, CoinGecko)');
+  throw new Error('Candle data unavailable from all sources (Coinbase, Binance, Kraken, CoinGecko)');
 }
 
 async function fetchBinanceKlines(baseUrl, symbol, interval, limit) {

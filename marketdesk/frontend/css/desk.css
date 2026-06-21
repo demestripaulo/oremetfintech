@@ -137,7 +137,14 @@ main.layout {
   padding: 14px;
 }
 
-@media (max-width: 1100px) {
+/* Tablet: chart full-width on top, indicators + connectors side by side */
+@media (min-width: 769px) and (max-width: 1100px) {
+  main.layout { grid-template-columns: 1fr 1fr; }
+  main.layout .col:first-child { grid-column: 1 / -1; }
+}
+
+/* Mobile: single column */
+@media (max-width: 768px) {
   main.layout { grid-template-columns: 1fr; }
 }
 
@@ -172,10 +179,23 @@ main.layout {
 .tf-btn:hover { border-color: var(--border-strong); color: var(--text); }
 .tf-btn.active { color: #07162B; border-color: var(--gold); background: var(--gold); font-weight: 700; }
 
+.card-header {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0 0 10px;
+}
+.card-header h2 { margin: 0; }
+.chart-source-tag {
+  font-size: 10px;
+  color: var(--muted);
+  font-family: 'JetBrains Mono', monospace;
+  opacity: 0.6;
+}
+
 #chart-container {
   width: 100%;
-  height: 420px;
-  min-height: 320px;
+  height: clamp(320px, 52vh, 620px);
   position: relative;
   overflow: hidden;
   border: 1px solid rgba(212, 175, 55, 0.25);
@@ -332,65 +352,6 @@ footer.disclaimer {
   border-top: 1px solid var(--border);
 }
 
-/* ---------- Chat ---------- */
-.chat-card { display: flex; flex-direction: column; }
-.chat-log {
-  height: 320px;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  margin-bottom: 8px;
-  padding-right: 4px;
-}
-.chat-msg { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; font-size: 13px; }
-.chat-msg.user { border-left: 2px solid var(--text-secondary); }
-.chat-msg.assistant { border-left: 2px solid var(--gold); }
-.chat-msg-header { display: flex; gap: 8px; align-items: center; font-size: 11px; color: var(--text-secondary); margin-bottom: 4px; }
-.chat-time { margin-left: auto; }
-.chat-msg-body { line-height: 1.5; white-space: pre-wrap; }
-.chat-copy-btn {
-  margin-top: 6px;
-  background: transparent;
-  border: 1px solid var(--border);
-  color: var(--text-secondary);
-  border-radius: 4px;
-  font-size: 11px;
-  padding: 2px 8px;
-  cursor: pointer;
-}
-.chat-typing { display: none; font-size: 12px; color: var(--text-secondary); margin-bottom: 6px; font-style: italic; }
-.chat-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
-.chat-chip {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  color: var(--text);
-  border-radius: 14px;
-  padding: 4px 10px;
-  font-size: 11px;
-  cursor: pointer;
-}
-.chat-chip:hover { border-color: var(--gold); }
-.chat-input-row { display: flex; gap: 6px; }
-.chat-input-row input {
-  flex: 1;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  color: var(--text);
-  padding: 8px 10px;
-  font-size: 13px;
-}
-.chat-input-row button {
-  background: var(--gold);
-  color: #07162B;
-  border: none;
-  border-radius: 6px;
-  padding: 8px 14px;
-  font-weight: 600;
-  cursor: pointer;
-}
-
 /* ---------- Market Structure ---------- */
 .ms-score-bar {
   display: flex;
@@ -445,12 +406,6 @@ footer.disclaimer {
 }
 .ms-breakdown-item.positive { color: var(--bull); }
 .ms-breakdown-item.negative { color: var(--bear); }
-
-/* ---------- Danelfin panel (kept for future use) ---------- */
-.danelfin-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
-.danelfin-card { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 8px; }
-.danelfin-card.muted { border-style: dashed; }
-.danelfin-card .ticker { font-weight: 700; font-size: 13px; margin-bottom: 4px; }
 
 .connector-notice {
   grid-column: 1 / -1;
@@ -541,7 +496,7 @@ input:focus, button:focus-visible {
   outline-offset: 2px;
 }
 
-@media (max-width: 680px) {
+@media (max-width: 768px) {
   header.topbar {
     align-items: flex-start;
     flex-wrap: wrap;
@@ -550,7 +505,7 @@ input:focus, button:focus-visible {
   .ticker-bar { order: 3; width: 100%; }
   main.layout { padding: 10px; gap: 10px; }
   .card { padding: 12px; }
-  #chart-container { height: 340px; }
+  #chart-container { height: clamp(280px, 45vh, 380px); }
   .intel-grid { grid-template-columns: 1fr; }
   .timeframe-row { flex-wrap: wrap; }
 }
