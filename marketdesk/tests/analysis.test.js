@@ -15,7 +15,7 @@ import {
   sma,
   ema,
   round,
-} from '../_archive/oracle/analysis.js';
+} from '../cloudflare/src/analysis.js';
 
 function makeCandle(time, open, high, low, close, volume = 100) {
   return { time, open, high, low, close, volume };

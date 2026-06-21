@@ -3,7 +3,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { predictRange } from '../_archive/oracle/predictions.js';
+import { predictRange } from '../cloudflare/src/predictions.js';
 
 function makeCandle(time, open, high, low, close, volume = 100) {
   return { time, open, high, low, close, volume };
@@ -32,7 +32,7 @@ test('predictRange returns a well-formed object for 15min and 1h', () => {
     assert.ok(['bullish', 'bearish', 'neutral'].includes(p.bias));
     assert.ok(p.confidence >= 20 && p.confidence <= 95);
     assert.equal(typeof p.explanation, 'string');
-    assert.ok(p.explanation.includes('educacional'));
+    assert.ok(p.explanation.includes('educational') || p.explanation.includes('educacional'));
   }
 });
 

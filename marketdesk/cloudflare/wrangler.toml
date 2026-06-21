@@ -46,7 +46,6 @@ crons = ["*/15 * * * *"]
 ENVIRONMENT = "production"
 
 # Secrets (do NOT put real values here — use `wrangler secret put <NAME>`):
-#   wrangler secret put DANELFIN_API_KEY      (optional)
 #   wrangler secret put GLASSNODE_API_KEY     (optional)
 #   wrangler secret put MESSARI_API_KEY       (optional, unused by free endpoints)
 #   wrangler secret put CRYPTOQUANT_WEBHOOK_SECRET (optional)

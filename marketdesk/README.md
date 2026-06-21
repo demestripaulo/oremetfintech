@@ -3,8 +3,11 @@
 Mesa de análise financeira educacional em tempo real, com foco em Bitcoin e
 principais criptomoedas (BTC, ETH, SOL, BNB, XRP). Exibe candlesticks,
 indicadores técnicos (RSI, MACD, Bollinger, ATR, padrões de vela), previsões
-de range para 15 minutos / 1 hora, conectores de decisão (bull/bear) e um
-log retrospectivo de acurácia.
+de range para 15 minutos / 1 hora / fechamento diário, Market Structure Score,
+conectores de decisão (bull/bear) e um log retrospectivo de acurácia.
+
+Suporte a **EN / PT-BR** via seletor de idioma. Dados via Coinbase → Binance →
+Kraken → CoinGecko (fallback automático).
 
 ⚠️ **Esta ferramenta é educacional.** Projeções são baseadas em análise
 técnica histórica e não constituem conselho financeiro.
@@ -13,43 +16,38 @@ técnica histórica e não constituem conselho financeiro.
 
 ```
 marketdesk/
-├── cloudflare/   # Backend opção A: Cloudflare Workers + Durable Objects + KV
-├── oracle/       # Backend opção B: Node.js/Express + ws + SQLite + PM2 + Nginx
-└── frontend/     # App single-page (HTML/CSS/JS puro), serve qualquer dos dois backends
+├── cloudflare/      # Backend: Cloudflare Workers + Durable Objects + KV
+├── frontend/        # Cópia de trabalho do frontend (sincronizar antes do deploy)
+├── tests/           # Testes unitários (Node.js test runner nativo)
+└── _archive/oracle/ # Backend legado Node.js/Express — arquivado, não usado no deploy
 ```
-
-Escolha **uma** das duas opções de backend. O frontend é o mesmo para ambas —
-ele aponta para `window.location.origin` por padrão (ver `frontend/index.html`).
 
 ---
 
-## Opção A — Deploy no Cloudflare Workers
+## Deploy no Cloudflare Workers
 
-Pré-requisitos: conta Cloudflare, Node.js 20+, `npm install -g wrangler` (ou use `npx wrangler`).
+Pré-requisitos: conta Cloudflare, Node.js 20+, `npx wrangler`.
 
 ```bash
 cd marketdesk/cloudflare
 npm install
 
-# 1. Login no Cloudflare
+# 1. Login
 npx wrangler login
 
-# 2. Criar o KV namespace usado para cache de histórico de previsões
+# 2. Criar o KV namespace para cache do histórico de previsões
 npx wrangler kv:namespace create marketdesk_kv
 # Copie o "id" retornado para wrangler.toml em [[kv_namespaces]] -> id
-# (opcional) crie também um preview namespace para `wrangler dev`:
+# (opcional) namespace de preview para wrangler dev:
 npx wrangler kv:namespace create marketdesk_kv --preview
 # Copie o "preview_id" para wrangler.toml -> preview_id
 ```
 
-⚠️ **O deploy falha com `KV namespace 'REPLACE_WITH_YOUR_KV_NAMESPACE_ID'
-is not valid [code: 10042]` até você substituir esses dois placeholders**
-em `wrangler.toml` pelos IDs reais retornados nos comandos acima — o
-repositório não pode conter o ID da sua conta, então isso é sempre um
-passo manual.
+⚠️ **O deploy falha com `KV namespace ... is not valid [code: 10042]`** até
+você substituir os dois placeholders em `wrangler.toml` pelos IDs reais
+retornados acima — o repositório não pode conter IDs da sua conta.
 
 ```bash
-
 # 3. Testar localmente
 npx wrangler dev
 
@@ -57,34 +55,24 @@ npx wrangler dev
 npx wrangler deploy
 ```
 
-Isso publica o Worker (rotas REST `/api/*`, WebSocket `/ws` via Durable
-Object `MarketHub`, e o Cron Trigger `*/15 * * * *` que recalcula e
-persiste previsões para todos os símbolos) **e também o frontend
-estático**, pela mesma URL.
+Isso publica o Worker (rotas REST `/api/*`, WebSocket `/ws` via Durable Object
+`MarketHub`, Cron Trigger `*/15 * * * *`) **e o frontend estático** pela mesma
+URL.
 
-### Frontend servido pelo próprio Worker (recomendado)
+### Frontend servido pelo próprio Worker
 
-`cloudflare/wrangler.toml` já tem um bloco `[assets]` apontando para
-`cloudflare/public/` (uma cópia de `../frontend`, ver abaixo) com
-`run_worker_first = true`: o Worker sempre roda primeiro, atende
-`/api/*`, `/ws` e `/webhooks/*`, e qualquer outra rota (`/`, `/css/*`,
-`/js/*`) cai automaticamente no binding `ASSETS`. Não é preciso
-configurar `API_BASE`/`WS_URL` manualmente — `frontend/index.html` já
-usa `window.location.origin`, que aponta para o próprio Worker.
+`wrangler.toml` tem um bloco `[assets]` apontando para `cloudflare/public/`
+com `run_worker_first = true`: o Worker atende `/api/*` e `/ws`; qualquer
+outra rota cai no binding `ASSETS` (HTML/CSS/JS). Não é preciso configurar
+`API_BASE`/`WS_URL` manualmente — `index.html` usa `window.location.origin`.
 
-Se você acessou a URL do Worker e viu um JSON de erro
-`{"error":"Not found"}` em vez do app, é porque o deploy foi feito
-**antes** dessa configuração de assets — rode `npx wrangler deploy`
-novamente a partir de `marketdesk/cloudflare/` para publicar a versão
-atual.
+Se aparecer `{"error":"Not found"}` em vez do app ao abrir a URL, rode
+`npx wrangler deploy` novamente a partir de `marketdesk/cloudflare/`.
 
-Se o log do deploy mostrar `No files to upload` para os assets (comum
-em builds conectados via Git/Workers Builds, quando o "Root directory"
-configurado no dashboard é `marketdesk/cloudflare/` e portanto
-`../frontend` fica fora do que foi baixado): por isso o diretório de
-assets aponta para `public/`, que é uma cópia committada de
-`../frontend` **dentro** de `cloudflare/`. Depois de editar qualquer
-arquivo em `frontend/`, sincronize antes de commitar:
+### Sincronizar frontend antes do deploy
+
+`cloudflare/public/` é uma cópia committed de `../frontend`. Após editar
+qualquer arquivo em `frontend/`, sincronize antes de commitar:
 
 ```bash
 cd marketdesk/cloudflare
@@ -92,226 +80,61 @@ npm run sync-assets   # copia ../frontend -> public/
 git add public
 ```
 
-Se o painel do Cloudflare (Workers Builds) mostrar um aviso de
-`Worker name mismatch` (o `name` em `wrangler.toml` não bate com o nome
-do projeto conectado), edite o campo `name` em `wrangler.toml` para o
-nome exato do seu projeto Cloudflare — ele já está como `oremetfintech`
-neste repositório; ajuste se o seu projeto tiver outro nome.
+### Worker name mismatch
 
-Requer wrangler 3.90+ para suportar Static Assets em Workers; se o
-deploy falhar reclamando do bloco `[assets]`, rode
-`npm install -D wrangler@latest` dentro de `marketdesk/cloudflare/`.
+Se o painel Cloudflare (Workers Builds) avisar `Worker name mismatch`, edite
+o campo `name` em `wrangler.toml` para o nome exato do seu projeto Cloudflare
+(já está como `oremetfintech` neste repositório).
 
-### Alternativa: frontend separado no Cloudflare Pages
+### Domínio customizado
 
-Se preferir hospedar o frontend em outro domínio/projeto (ex.: Pages),
-ainda é possível:
-
-```bash
-cd marketdesk/frontend
-npx wrangler pages deploy . --project-name=marketdesk
-```
-
-⚠️ Aponte o comando para a pasta `frontend/` (que contém `index.html`,
-`css/` e `js/`). Rodar `wrangler pages deploy` sem argumento de
-diretório, ou de dentro de `marketdesk/cloudflare/` (que só tem código
-do Worker, sem HTML/CSS), gera o erro:
-`Could not detect a directory containing static files`.
-
-Nesse caso, edite `frontend/index.html` e aponte
-`window.MARKETDESK_CONFIG.API_BASE`/`WS_URL` para a URL do Worker (que
-fica em domínio diferente do Pages), por exemplo:
-
-```js
-window.MARKETDESK_CONFIG = {
-  API_BASE: "https://marketdesk.<seu-subdominio>.workers.dev",
-  WS_URL: "wss://marketdesk.<seu-subdominio>.workers.dev/ws",
-};
-```
-
-### Domínio customizado (Cloudflare)
-
-No `wrangler.toml`, adicione:
+No `wrangler.toml`:
 
 ```toml
 routes = [{ pattern = "marketdesk.seudominio.com/*", custom_domain = true }]
 ```
 
-E garanta que o domínio esteja na mesma conta Cloudflare (zona DNS gerenciada
-pela Cloudflare). Depois rode `npx wrangler deploy` novamente.
-
 ### Variáveis de ambiente
 
-Definidas em `[vars]` no `wrangler.toml` (ex.: `ENVIRONMENT`). Não há
-chaves de API necessárias — Binance e CoinGecko são usadas como APIs
-públicas sem autenticação.
+Nenhuma chave de API é obrigatória. Dados de mercado (Coinbase, Kraken,
+CoinGecko) são públicos e gratuitos.
 
----
+Chaves opcionais (degradam graciosamente sem elas):
 
-## Opção B — Deploy no Oracle Cloud (OCI Free Tier, Ubuntu 22.04 ARM Ampere A1)
-
-1. Crie uma instância Compute "Always Free" (Ampere A1, Ubuntu 22.04) na OCI.
-2. Abra as portas 80 e 443 na **Security List** da VCN (Networking > VCN >
-   Security Lists > Add Ingress Rule, para `0.0.0.0/0`, portas 80 e 443 TCP).
-3. Conecte via SSH e clone este repositório.
-
-```bash
-cd marketdesk/oracle
-chmod +x setup.sh
-./setup.sh
 ```
-
-O script `setup.sh`:
-- Atualiza o sistema e instala build tools (necessários para compilar o
-  `better-sqlite3` nativamente em ARM), Node.js 20, PM2 e Nginx.
-- Instala as dependências do projeto (`npm install`).
-- Copia `nginx.conf` para `/etc/nginx/sites-available/` e ativa o site.
-- Inicia o processo com PM2 (`ecosystem.config.js`) e configura
-  `pm2 startup` para reiniciar automaticamente após reboot.
-
-Após o setup, o backend roda em `http://127.0.0.1:8080` (proxy reverso do
-Nginx expõe na porta 80) e o WebSocket fica disponível em `/ws`.
-
-### Domínio customizado e HTTPS (Oracle)
-
-1. Aponte o DNS do seu domínio (registro A) para o IP público da instância.
-2. Edite `server_name` em `nginx.conf` (e em `/etc/nginx/sites-available/marketdesk.conf`)
-   para o seu domínio.
-3. Rode:
-   ```bash
-   sudo apt-get install -y certbot python3-certbot-nginx
-   sudo certbot --nginx -d marketdesk.seudominio.com
-   ```
-   Isso configura HTTPS/WSS automaticamente via Let's Encrypt.
-
-### Variáveis de ambiente
-
-- `PORT` (padrão `8080`) — porta interna do servidor Node, definida em
-  `ecosystem.config.js`.
-
-### Comandos úteis (PM2)
-
-```bash
-pm2 status
-pm2 logs marketdesk
-pm2 restart marketdesk
+wrangler secret put GLASSNODE_API_KEY     # on-chain metrics (free tier)
+wrangler secret put MESSARI_API_KEY       # reservado para uso futuro
 ```
 
 ---
 
-## Reconexão de WebSocket
+## Testes
 
-Tanto o `MarketHub` (Durable Object, Cloudflare) quanto o relay WS do
-servidor Oracle reconectam automaticamente ao stream upstream da Binance
-usando backoff exponencial (1s, 2s, 4s, ... até 30s). O frontend
-(`frontend/js/app.js`) também reconecta ao backend com a mesma estratégia.
+```bash
+cd marketdesk
+node --test tests/analysis.test.js tests/predictions.test.js tests/connectors.test.js
+# 27 testes passando
+```
 
-## Rate limiting e cache
-
-Toda chamada REST à Binance passa por um throttle mínimo de ~120ms entre
-requisições e por um cache de no mínimo 5 segundos (em memória), tanto no
-Worker quanto no servidor Node, evitando exceder os limites públicos da
-Binance API.
+---
 
 ## Fontes de dados
 
-- Binance WebSocket (`wss://stream.binance.com:9443/stream?streams=...@kline_1m`)
-- Binance REST (`/api/v3/klines`, `/api/v3/ticker/24hr`)
-- CoinGecko (`/coins/{id}/ohlc`) como fallback caso a Binance esteja
-  inacessível.
+| Fonte | Uso | Autenticação |
+|---|---|---|
+| Coinbase Exchange | Candles + ticker (primário) | Pública |
+| Binance / Binance.US | Fallback de candles | Pública |
+| Kraken | Fallback de candles | Pública |
+| CoinGecko | Fallback final de candles | Pública |
+| Alternative.me | Fear & Greed Index | Pública |
+| CoinGecko | Sentimento social | Pública |
+| Glassnode | On-chain (endereços, netflow) | Free tier (opcional) |
+| RSS público | Notícias (CoinDesk, Cointelegraph, CryptoNews) | Pública |
 
 ---
 
-## Módulo de IA — Chat + Conectores Externos
+## WebSocket e reconexão
 
-### Chat com IA (`/api/chat`)
-
-O chat injeta automaticamente um snapshot do mercado (preço, RSI, MACD,
-volume, padrão de candle, S/R, previsões 15min/1h) no `system` prompt a
-cada mensagem, e usa **tool use / function calling** para o modelo
-consultar dados em tempo real (`get_current_price`, `get_danelfin_score`,
-`get_fear_greed`, `get_price_prediction`, `get_support_resistance`,
-`get_recent_news`). A resposta final é transmitida via SSE
-(Server-Sent Events).
-
-**Cloudflare (padrão, sem custo extra):** usa o binding nativo
-**Workers AI** (`env.AI`, modelo `@cf/meta/llama-3.3-70b-instruct-fp8-fast`
-com function calling), já configurado em `wrangler.toml`:
-
-```toml
-[ai]
-binding = "AI"
-```
-
-Não é preciso nenhuma API key — toda conta Cloudflare tem uma cota
-gratuita de neurônios do Workers AI. Basta `wrangler deploy`.
-
-**Oracle:** o backend Node.js (`oracle/chat.js`) ainda usa a API da
-Anthropic e requer:
-
-```
-ANTHROPIC_API_KEY=sk-ant-...
-```
-
-definida no ambiente do processo (ex.: exportar antes de `pm2 start`,
-ou editar `oracle/ecosystem.config.cjs`). Para usar Workers AI também
-no Oracle seria necessário trocar por outra API compatível, já que o
-binding `env.AI` só existe dentro de Cloudflare Workers.
-
-### Danelfin (ações correlatas ao BTC)
-
-`GET /api/connectors/danelfin` retorna AI Scores (1–10) para
-MSTR, COIN, MARA, RIOT e IBIT. Requer `DANELFIN_API_KEY` (plano pago em
-danelfin.com/pricing/api). Sem a chave, o painel exibe um aviso por
-ativo em vez de falhar.
-
-### TrendSpider (webhook bidirecional)
-
-TrendSpider não expõe API pública de dados — a integração é via webhook:
-
-- **Receber alertas do TrendSpider:** configure em TrendSpider
-  *Settings > Webhooks* a URL `https://<seu-app>/webhooks/trendspider`.
-  O payload esperado é `{ symbol, alert_type, price, timeframe, message, timestamp }`.
-  Cada evento recebido é logado, notificado em tempo real no dashboard
-  (via WebSocket) e dispara o alerta sonoro/visual configurado.
-- **Enviar alertas para o TrendSpider:** cole a URL do seu webhook de
-  entrada do TrendSpider no painel "TrendSpider Webhook" da UI, ative o
-  toggle e clique em "Testar conexão". O job periódico de 15 minutos
-  envia automaticamente um alerta quando um padrão de candle relevante
-  (não neutro) é detectado.
-
-### Inteligência externa (gratuita)
-
-`GET /api/connectors/intelligence` agrega:
-- **Fear & Greed Index** (alternative.me, gratuito, sem chave).
-- **Sentimento social/dev** (CoinGecko `/coins/bitcoin`, gratuito).
-- **On-chain** (Glassnode — endereços ativos, exchange netflow, SOPR).
-  Requer `GLASSNODE_API_KEY` (tier gratuito em glassnode.com/login);
-  sem a chave, os campos retornam erro individualmente sem quebrar o painel.
-
-`GET /api/connectors/news?asset=bitcoin` agrega notícias das últimas 2h
-de feeds RSS públicos (CoinDesk, Cointelegraph, CryptoNews), filtradas
-por palavras-chave e classificadas localmente como BULLISH/BEARISH/NEUTRO
-por keyword matching. Cada item tem um botão "Perguntar ao Claude" que
-injeta a notícia como contexto no chat.
-
-Messari (`data.messari.io`) está implementado em `connectors.js`
-(`getMessariMetrics`) para uso futuro/manual via tool use — os endpoints
-básicos são gratuitos e não exigem chave.
-
-### Variáveis de ambiente — resumo completo
-
-```
-# Obrigatório para o chat apenas no backend Oracle (Cloudflare usa o
-# binding [ai]/Workers AI nativo, sem necessidade de chave)
-ANTHROPIC_API_KEY=sk-ant-...    # apenas oracle/
-
-# Opcionais (funcionalidades extras; degradam graciosamente sem elas)
-DANELFIN_API_KEY=...           # danelfin.com/pricing/api
-GLASSNODE_API_KEY=...          # glassnode.com (free tier)
-MESSARI_API_KEY=...            # messari.io (free, não exigido pelos endpoints básicos)
-CRYPTOQUANT_WEBHOOK_SECRET=...  # reservado para validação de webhooks CryptoQuant
-
-# Configurado pelo usuário via UI (painel TrendSpider), não por env var
-# TRENDSPIDER_WEBHOOK_URL é salvo no KV (Cloudflare) ou em memória (Oracle)
-```
+O `MarketHub` (Durable Object) mantém o relay do stream Coinbase → Kraken para
+os 5 símbolos ativos, reconectando com backoff exponencial (1s → 30s). O
+frontend também reconecta com a mesma estratégia.
