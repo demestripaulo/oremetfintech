@@ -57,8 +57,6 @@ marketdesk/
 ├── frontend/                  # cópia de trabalho do frontend
 │   └── ...                    # sincronizar com `npm run sync-assets` antes do deploy
 │
-└── _archive/oracle/           # Backend Node.js/Express — ARQUIVADO, não usado no deploy
-    └── ...                    # mantido para referência histórica
 ```
 
 ---
@@ -176,7 +174,7 @@ Altura do gráfico: `clamp(320px, 52vh, 620px)`.
 
 ## 5. Testes
 
-Todos importam de `cloudflare/src/` (não do oracle arquivado):
+Todos importam de `cloudflare/src/`:
 
 ```bash
 node --test tests/analysis.test.js tests/predictions.test.js tests/connectors.test.js
@@ -218,11 +216,3 @@ git add public
 
 O script `sync-assets` já roda automaticamente antes de `dev` e `deploy`.
 
----
-
-## 8. Archive Oracle
-
-`_archive/oracle/` contém o backend Node.js/Express original (Express + ws +
-SQLite + PM2 + Nginx). **Não está no deploy ativo.** Mantido como referência
-histórica para quem quiser rodar em uma VM tradicional (ex.: OCI Free Tier,
-Ampere A1).

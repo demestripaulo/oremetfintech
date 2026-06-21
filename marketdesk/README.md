@@ -18,8 +18,7 @@ técnica histórica e não constituem conselho financeiro.
 marketdesk/
 ├── cloudflare/      # Backend: Cloudflare Workers + Durable Objects + KV
 ├── frontend/        # Cópia de trabalho do frontend (sincronizar antes do deploy)
-├── tests/           # Testes unitários (Node.js test runner nativo)
-└── _archive/oracle/ # Backend legado Node.js/Express — arquivado, não usado no deploy
+└── tests/           # Testes unitários (Node.js test runner nativo)
 ```
 
 ---
