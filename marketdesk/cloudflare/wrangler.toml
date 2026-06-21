@@ -35,9 +35,7 @@ binding = "MARKET_KV"
 id = "03fa9c241ff94cd7b79b92e1bb4a9dda"
 preview_id = "6c9b016631fd4ca5a15fe8d17f089ba6"
 
-# Cloudflare Workers AI binding — powers /api/chat (Llama 3.3 70B with tool
-# use). Free-tier neuron allowance included on every account, no API key
-# needed; this replaces the previous Anthropic-based chat integration.
+# Cloudflare Workers AI binding (reserved for future use).
 [ai]
 binding = "AI"
 

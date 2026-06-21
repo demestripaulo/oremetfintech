@@ -1,7 +1,6 @@
-// External data connectors: Danelfin (correlated stocks), Fear & Greed,
-// CoinGecko sentiment, Glassnode on-chain, Messari fundamentals, and a
-// lightweight RSS aggregator for crypto news. All functions degrade
-// gracefully (return null / empty) when an API key or upstream is missing.
+// External data connectors: Fear & Greed, CoinGecko sentiment, Glassnode
+// on-chain metrics, and a lightweight RSS aggregator for crypto news.
+// All functions degrade gracefully when an API key or upstream is missing.
 
 const cache = new Map();
 
@@ -12,55 +11,6 @@ function cached(key, ttlMs, fn) {
     cache.set(key, { data, ts: Date.now() });
     return data;
   });
-}
-
-export const BTC_CORRELATED_STOCKS = ['MSTR', 'COIN', 'MARA', 'RIOT', 'IBIT'];
-
-export async function getDanelfinScore(ticker, apiKey) {
-  if (!apiKey) return { ticker, unavailable: true, error: 'DANELFIN_API_KEY não configurada' };
-  return cached(`danelfin:${ticker}`, 60 * 60 * 1000, async () => {
-    try {
-      const res = await fetch(`https://apirest.danelfin.com/ranking?ticker=${ticker}`, {
-        headers: { 'x-api-key': apiKey },
-      });
-      if (!res.ok) throw new Error(`Danelfin HTTP ${res.status}`);
-      const data = await res.json();
-      return {
-        ticker,
-        aiScore: data.ai_score,
-        technical: data.technical,
-        fundamental: data.fundamental,
-        sentiment: data.sentiment,
-        lowRisk: data.low_risk,
-        signal: data.signal,
-      };
-    } catch (err) {
-      return { ticker, error: err.message };
-    }
-  });
-}
-
-export async function getDanelfinPanel(apiKey) {
-  if (!apiKey) {
-    return {
-      configured: false,
-      tickers: BTC_CORRELATED_STOCKS,
-      scores: BTC_CORRELATED_STOCKS.map((ticker) => ({
-        ticker,
-        unavailable: true,
-        error: 'DANELFIN_API_KEY não configurada',
-      })),
-      message: 'Danelfin API key não configurada. Os correlatos BTC serão exibidos quando a chave for adicionada ao Worker.',
-      note: 'Tickers correlatos esperados: MSTR, COIN, MARA, RIOT, IBIT. Nenhum score foi estimado.',
-    };
-  }
-  const scores = await Promise.all(BTC_CORRELATED_STOCKS.map((t) => getDanelfinScore(t, apiKey)));
-  return {
-    configured: true,
-    tickers: BTC_CORRELATED_STOCKS,
-    scores,
-    note: 'Dados de ações correlatas via Danelfin AI. Scores são para ações, não para BTC diretamente.',
-  };
 }
 
 export async function getFearGreedIndex() {

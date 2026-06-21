@@ -230,10 +230,6 @@ function connectWS() {
     } catch {
       return;
     }
-    if (tick.type === 'system_event' && tick.eventType === 'trendspider') {
-      showToast(tick.notification || 'Alerta TrendSpider recebido');
-      return;
-    }
     if (tick.type !== 'kline') return;
 
     const sym = tick.symbol;
