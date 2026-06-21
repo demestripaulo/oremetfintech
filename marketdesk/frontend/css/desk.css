@@ -502,7 +502,7 @@ input:focus, button:focus-visible {
     flex-wrap: wrap;
   }
   .brand { width: 100%; }
-  .ticker-bar { order: 3; width: 100%; }
+  .ticker-bar { order: 3; flex: 0 0 100%; width: 100%; }
   main.layout { padding: 10px; gap: 10px; }
   .card { padding: 12px; }
   #chart-container { height: clamp(280px, 45vh, 380px); }
