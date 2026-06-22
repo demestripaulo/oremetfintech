@@ -121,8 +121,8 @@ node --test tests/analysis.test.js tests/predictions.test.js tests/connectors.te
 
 | Fonte | Uso | Autenticação |
 |---|---|---|
-| Coinbase Exchange | Candles (1º fallback REST) | Pública |
-| Kraken | Candles (2º fallback REST) + WebSocket primário | Pública |
+| Kraken | Candles (primário REST) + WebSocket primário | Pública |
+| Coinbase Exchange | Candles (2º fallback REST) | Pública |
 | Binance / Binance.US | Fallback de candles | Pública |
 | CoinGecko | Fallback final de candles | Pública |
 | Alternative.me | Fear & Greed Index | Pública |
