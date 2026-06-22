@@ -107,9 +107,9 @@ export async function fetchKlines(symbol, interval = '1m', limit = 200) {
 
   const sourceEntries = [];
   if (COINBASE_PRODUCT[sym]) sourceEntries.push({ name: 'Coinbase', fn: () => fetchCoinbaseKlines(sym, spec.coinbaseSec, limit) });
+  if (KRAKEN_PAIR[sym]) sourceEntries.push({ name: 'Kraken', fn: () => fetchKrakenKlines(sym, spec.krakenMin, limit) });
   sourceEntries.push({ name: 'Binance', fn: () => fetchBinanceKlines(BINANCE_REST, sym, spec.binance, limit) });
   sourceEntries.push({ name: 'Binance.US', fn: () => fetchBinanceKlines(BINANCE_US_REST, sym, spec.binance, limit) });
-  if (KRAKEN_PAIR[sym]) sourceEntries.push({ name: 'Kraken', fn: () => fetchKrakenKlines(sym, spec.krakenMin, limit) });
   sourceEntries.push({ name: 'CoinGecko', fn: () => fetchCoinGeckoKlines(sym, limit) });
 
   for (const { name, fn } of sourceEntries) {

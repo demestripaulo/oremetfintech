@@ -1,6 +1,6 @@
 // Durable Object that maintains a live upstream WebSocket and fans out ticks
-// to every browser client. Primary source: Coinbase Advanced Trade WebSocket
-// (reliable from Cloudflare IPs). Fallback: Kraken WebSocket.
+// to every browser client. Primary source: Kraken WebSocket.
+// Fallback: Coinbase Advanced Trade WebSocket.
 // Binance is intentionally excluded — it blocks Cloudflare IP ranges.
 
 const COINBASE_WS = 'wss://advanced-trade-ws.coinbase.com';
@@ -40,8 +40,8 @@ export class MarketHub {
     this.upstream = null;
     this.upstreamReconnectAttempts = 0;
     this.lastTicks = new Map();
-    // 'coinbase' | 'kraken'
-    this.activeSource = 'coinbase';
+    // 'kraken' | 'coinbase'
+    this.activeSource = 'kraken';
     // Accumulate partial candle state per symbol (Coinbase sends trades, not klines).
     this.partialCandles = new Map();
     // Bucket start time (floored to 1-minute boundary) per symbol.

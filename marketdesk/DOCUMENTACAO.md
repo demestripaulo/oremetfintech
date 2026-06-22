@@ -110,7 +110,7 @@ Sempre chamado com candles de 1m para manter granularidade operacional.
 
 `fetchKlines(symbol, interval, limit)` → `{ candles, source }`:
 
-Fallback por ordem: **Coinbase → Binance → Binance.US → Kraken → CoinGecko**.
+Fallback por ordem: **Coinbase → Kraken → Binance → Binance.US → CoinGecko**.
 Coinbase e Kraken têm prioridade porque Binance bloqueia IPs de cloud (HTTP 451/403).
 Cache em memória de 5s, throttle mínimo de 120ms entre requisições.
 

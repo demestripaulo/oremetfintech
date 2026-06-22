@@ -2,7 +2,7 @@ const { API_BASE, WS_URL } = window.MARKETDESK_CONFIG;
 
 const SYMBOLS = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT'];
 let activeSymbol = 'BTCUSDT';
-let activeTimeframe = '15m';
+let activeTimeframe = '1m';
 let alertsEnabled = true;
 let lastAlertState = { sr: null, rsi: null };
 
