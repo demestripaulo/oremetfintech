@@ -91,17 +91,17 @@ class MarketChart {
 
 function chartTheme() {
   return {
-    card: '#050e1a',
-    text: '#33FF77',
-    border: 'rgba(212, 175, 55, 0.4)',
-    grid: 'rgba(51, 255, 119, 0.05)',
-    bull: '#00E676',
-    bear: '#FF1744',
-    gold: '#D4AF37',
-    goldSoft: '#F3E6B3',
-    info: '#7EA6D9',
-    bullVolume: 'rgba(0, 230, 118, 0.22)',
-    bearVolume: 'rgba(255, 23, 68, 0.22)',
+    card:       '#030507',
+    text:       '#5c7a8e',
+    border:     'rgba(0, 212, 255, 0.22)',
+    grid:       'rgba(0, 212, 255, 0.04)',
+    bull:       '#00ff9c',
+    bear:       '#ff3366',
+    gold:       '#00d4ff',   // EMA 9 — cyan
+    goldSoft:   '#ffb700',   // SMA 50 — amber
+    info:       '#ff2d78',   // EMA 21 — magenta
+    bullVolume: 'rgba(0, 255, 156, 0.18)',
+    bearVolume: 'rgba(255, 51, 102, 0.18)',
   };
 }
 
