@@ -209,17 +209,20 @@ export class MarketHub {
     if (!symbol || !data || !data.c) return;
 
     const price = parseFloat(data.c[0]);
+    // Kraken ticker: v[0] = today's volume, t[0] = today's trade count (use vol increment per tick)
+    const vol = parseFloat(data.v?.[0] || 0);
     const nowSec = Math.floor(Date.now() / 1000);
     const bucketSec = nowSec - (nowSec % 60);
 
     let candle = this.partialCandles.get(symbol);
     if (!candle || this.bucketStart.get(symbol) !== bucketSec) {
-      candle = { time: bucketSec, open: price, high: price, low: price, close: price, volume: 0 };
+      candle = { time: bucketSec, open: price, high: price, low: price, close: price, volume: vol };
       this.bucketStart.set(symbol, bucketSec);
     } else {
       candle.high = Math.max(candle.high, price);
       candle.low = Math.min(candle.low, price);
       candle.close = price;
+      if (vol > candle.volume) candle.volume = vol;
     }
     this.partialCandles.set(symbol, candle);
 
