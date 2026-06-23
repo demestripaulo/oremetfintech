@@ -239,7 +239,7 @@ function connectWS() {
       renderTickerBar();
     }
 
-    if (sym === activeSymbol && activeTimeframe === '1m') {
+    if (sym === activeSymbol) {
       chart?.updateLastCandle(tick.candle);
     }
   });
@@ -283,6 +283,7 @@ document.addEventListener('DOMContentLoaded', () => {
   connectWS();
 
   setInterval(fetchTickers, 5000);
+  setInterval(() => { if (activeTimeframe !== '1m') loadCandles(); }, 15000);
   setInterval(loadAnalysis, 15000);
   setInterval(loadPredictions, 60000);
   setInterval(loadHistory, 60000);
