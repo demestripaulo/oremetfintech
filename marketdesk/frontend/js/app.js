@@ -84,7 +84,7 @@ function drainAlertQueue() {
   if (!strip || !textEl) { alertQueue.length = 0; alertRunning = false; return; }
   const msg = alertQueue.shift();
   textEl.textContent = msg;
-  const duration = Math.max(7000, msg.length * 65);
+  const duration = Math.max(12000, msg.length * 110);
   strip.classList.add('visible');
   textEl.style.animation = 'none';
   void textEl.offsetWidth;

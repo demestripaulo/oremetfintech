@@ -727,14 +727,14 @@ footer.disclaimer {
   padding: 3px 16px;
   background: rgba(255, 183, 0, 0.06);
   border-top: 1px solid rgba(255, 183, 0, 0.18);
-  height: 24px;
+  height: 30px;
   overflow: hidden;
 }
 .alert-strip.visible { display: flex; }
 
 .alert-strip-label {
   flex-shrink: 0;
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.12em;
   color: var(--amber);
@@ -753,7 +753,7 @@ footer.disclaimer {
   display: inline-block;
   white-space: nowrap;
   font-family: 'JetBrains Mono', monospace;
-  font-size: 11px;
+  font-size: 13px;
   color: var(--text);
   will-change: transform;
 }
