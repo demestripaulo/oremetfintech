@@ -338,6 +338,21 @@ document.addEventListener('DOMContentLoaded', () => {
     alertsEnabled = e.target.checked;
   });
 
+  const themeBtn = $('theme-toggle');
+  if (themeBtn) {
+    const syncThemeBtn = () => {
+      const isLight = document.documentElement.classList.contains('light');
+      themeBtn.textContent = isLight ? 'DARK' : 'LIGHT';
+    };
+    syncThemeBtn();
+    themeBtn.addEventListener('click', () => {
+      const isLight = document.documentElement.classList.toggle('light');
+      localStorage.setItem('md_theme', isLight ? 'light' : 'dark');
+      chart?.applyTheme(isLight);
+      syncThemeBtn();
+    });
+  }
+
   fetchTickers();
   loadAll();
   connectBinanceWS(); // starts Binance direct WS; falls back to DO relay if disabled/unavailable

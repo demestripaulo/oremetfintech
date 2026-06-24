@@ -43,7 +43,24 @@ class MarketChart {
     this.ema21Series = addSeriesCompat(this.chart, 'Line', { color: theme.info, lineWidth: 1 });
     this.sma50Series = addSeriesCompat(this.chart, 'Line', { color: theme.goldSoft, lineWidth: 1 });
 
-    // autoSize:true handles resize automatically in v4+
+      // autoSize:true handles resize automatically in v4+
+  }
+
+  applyTheme(isLight) {
+    const theme = isLight ? chartThemeLight() : chartThemeDark();
+    this.theme = theme;
+    this.chart.applyOptions({
+      layout: { background: { color: theme.card }, textColor: theme.text },
+      grid: { vertLines: { color: theme.grid }, horzLines: { color: theme.grid } },
+      rightPriceScale: { borderColor: theme.border },
+    });
+    this.candleSeries.applyOptions({
+      upColor: theme.bull, downColor: theme.bear,
+      wickUpColor: theme.bull, wickDownColor: theme.bear,
+    });
+    this.ema9Series.applyOptions({ color: theme.gold });
+    this.ema21Series.applyOptions({ color: theme.info });
+    this.sma50Series.applyOptions({ color: theme.goldSoft });
   }
 
   _t(utc) { return utc + this.tzOffset; }
@@ -90,6 +107,12 @@ class MarketChart {
 }
 
 function chartTheme() {
+  return document.documentElement.classList.contains('light')
+    ? chartThemeLight()
+    : chartThemeDark();
+}
+
+function chartThemeDark() {
   return {
     card:       '#030507',
     text:       '#5c7a8e',
@@ -97,11 +120,27 @@ function chartTheme() {
     grid:       'rgba(0, 212, 255, 0.04)',
     bull:       '#00ff9c',
     bear:       '#ff3366',
-    gold:       '#00d4ff',   // EMA 9 — cyan
-    goldSoft:   '#ffb700',   // SMA 50 — amber
-    info:       '#ff2d78',   // EMA 21 — magenta
+    gold:       '#00d4ff',
+    goldSoft:   '#ffb700',
+    info:       '#ff2d78',
     bullVolume: 'rgba(0, 255, 156, 0.18)',
     bearVolume: 'rgba(255, 51, 102, 0.18)',
+  };
+}
+
+function chartThemeLight() {
+  return {
+    card:       '#ffffff',
+    text:       '#3d5566',
+    border:     'rgba(0, 111, 168, 0.28)',
+    grid:       'rgba(13, 27, 42, 0.05)',
+    bull:       '#007a2f',
+    bear:       '#c41a2a',
+    gold:       '#006fa8',
+    goldSoft:   '#9a6000',
+    info:       '#b8004a',
+    bullVolume: 'rgba(0, 122, 47, 0.18)',
+    bearVolume: 'rgba(196, 26, 42, 0.18)',
   };
 }
 

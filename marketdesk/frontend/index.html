@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
 <title>OrEmet MarketDesk — Educational Analysis Desk</title>
+<script>if (localStorage.getItem('md_theme') === 'light') document.documentElement.classList.add('light');</script>
 <link rel="stylesheet" href="css/desk.css" />
 <script src="https://unpkg.com/lightweight-charts@4.2.3/dist/lightweight-charts.standalone.production.js"></script>
 <script src="https://unpkg.com/twemoji@14.0.2/dist/twemoji.min.js" crossorigin="anonymous"></script>
@@ -18,12 +19,124 @@
     <input type="checkbox" id="alert-toggle" checked />
     <span data-i18n="alerts">Alerts</span>
   </label>
+  <button class="theme-btn" id="theme-toggle" title="Toggle light / dark mode">LIGHT</button>
   <div class="lang-switcher">
     <button class="lang-btn active" data-lang="en" title="English">🇺🇸 EN</button>
     <button class="lang-btn" data-lang="pt" title="Português">🇧🇷 PT</button>
   </div>
   <img src="img/oremet-seal.svg" alt="OrEmet Seal" class="header-seal" />
 </header>
+
+<main class="layout">
+
+  <!-- Col 1: chart + predictions -->
+  <div class="col">
+    <div class="card">
+      <div class="card-header">
+        <h2 data-i18n="mainChart">Main Chart</h2>
+        <span class="chart-source-tag" id="chart-source"></span>
+      </div>
+      <div class="timeframe-row" id="timeframe-row">
+        <button class="tf-btn active" data-tf="1m">1m</button>
+        <button class="tf-btn" data-tf="5m">5m</button>
+        <button class="tf-btn" data-tf="15m">15m</button>
+        <button class="tf-btn" data-tf="1h">1h</button>
+        <button class="tf-btn" data-tf="4h">4h</button>
+        <button class="tf-btn" data-tf="1D">1D</button>
+      </div>
+      <div id="chart-container"></div>
+      <div class="chart-legend">
+        <span class="legend-item tooltip" data-i18n-tip="candleUpTip" data-i18n-legend="legendUp"><span class="legend-swatch bull-swatch"></span>Bullish<span class="tip">Bullish candle (green): close above open — buyers dominated the period.</span></span>
+        <span class="legend-item tooltip" data-i18n-tip="candleDownTip" data-i18n-legend="legendDown"><span class="legend-swatch bear-swatch"></span>Bearish<span class="tip">Bearish candle (red): close below open — sellers dominated the period.</span></span>
+        <span class="legend-item tooltip" data-i18n-tip="ema9Tip"><span class="legend-swatch line-swatch" style="background:#00d4ff"></span>EMA 9<span class="tip">EMA 9 (cyan): Short-term EMA. Price above = immediate buying strength.</span></span>
+        <span class="legend-item tooltip" data-i18n-tip="ema21Tip"><span class="legend-swatch line-swatch" style="background:#ff2d78"></span>EMA 21<span class="tip">EMA 21 (magenta): Medium-term EMA. Crossover with EMA 9 signals trend change.</span></span>
+        <span class="legend-item tooltip" data-i18n-tip="sma50Tip"><span class="legend-swatch line-swatch" style="background:#ffb700"></span>SMA 50<span class="tip">SMA 50 (amber): 50-period SMA. Long-term trend reference — price above = bull territory.</span></span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2 data-i18n="predictionRange">Range Forecast</h2>
+      <div id="predictions-container"></div>
+    </div>
+  </div>
+
+  <!-- Col 2: trade filter (top) + S/R + market structure + indicators (bottom) -->
+  <div class="col">
+    <div class="card">
+      <h2 data-i18n="tradeFilterTitle">Kalshi Trade Filter</h2>
+      <div id="tradefilter-container"></div>
+    </div>
+
+    <div class="card">
+      <h2 data-i18n="supportResistance">Support &amp; Resistance</h2>
+      <div id="sr-container"></div>
+    </div>
+
+    <div class="card">
+      <h2 data-i18n="marketStructure">Market Structure</h2>
+      <div id="ms-container"></div>
+    </div>
+
+    <div class="card">
+      <h2 data-i18n="technicalIndicators">Technical Indicators</h2>
+      <div id="indicators-container"></div>
+    </div>
+  </div>
+
+  <!-- Col 3: connectors + intelligence + news + history + glossary -->
+  <div class="col">
+    <div class="card">
+      <h2 data-i18n="decisionConnectors">Decision Connectors</h2>
+      <div id="connectors-container"></div>
+    </div>
+
+    <div class="card">
+      <h2 data-i18n="externalIntelligence">External Intelligence</h2>
+      <div class="intel-grid" id="intelligence-container"></div>
+    </div>
+
+    <div class="card">
+      <h2 data-i18n="marketNews">Market Intelligence — News</h2>
+      <div id="news-container"></div>
+    </div>
+
+    <div class="card">
+      <h2 data-i18n="historyLog">Analysis History &amp; Log</h2>
+      <div id="history-container"></div>
+    </div>
+
+    <div class="card">
+      <details class="glossary" id="glossary-container" open>
+        <summary data-i18n="learnSummary">Learn the Market</summary>
+        <div id="glossary-list"></div>
+      </details>
+    </div>
+  </div>
+
+</main>
+
+<div id="toast-container"></div>
+
+<footer class="disclaimer">
+  <span data-i18n="disclaimer">⚠️ This tool is for educational purposes. Projections are based on historical technical analysis and do not constitute financial advice. Always trade with proper risk management.</span>
+</footer>
+
+<script>
+  window.MARKETDESK_CONFIG = {
+    API_BASE: window.location.origin,
+    WS_URL: (window.location.protocol === 'https:' ? 'wss://' : 'ws://') + window.location.host + '/ws',
+    USE_BINANCE_DIRECT_WS: true,
+  };
+</script>
+<script src="js/i18n.js?v=7"></script>
+<script src="js/glossary.js?v=7"></script>
+<script src="js/indicators.js?v=7"></script>
+<script src="js/predictions.js?v=7"></script>
+<script src="js/chart.js?v=7"></script>
+<script src="js/app.js?v=7"></script>
+<script src="js/connectors.js?v=7"></script>
+</body>
+</html>
 
 <main class="layout">
 

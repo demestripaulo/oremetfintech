@@ -748,6 +748,102 @@ input:focus, button:focus-visible {
 }
 
 /* ============================================================
+   Theme toggle button
+   ============================================================ */
+.theme-btn {
+  background: transparent;
+  border: 1px solid var(--border-strong);
+  color: var(--text-secondary);
+  padding: 4px 10px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color 0.2s, color 0.2s;
+}
+.theme-btn:hover {
+  border-color: var(--cyan);
+  color: var(--cyan);
+}
+
+/* ============================================================
+   Light mode — full variable override
+   ============================================================ */
+html.light {
+  --bg:            #f0f4f8;
+  --surface:       #e2e8f0;
+  --card:          #ffffff;
+  --card-elevated: #f8fafc;
+  --cyan:          #006fa8;
+  --cyan-dim:      rgba(0, 111, 168, 0.08);
+  --cyan-glow:     rgba(0, 111, 168, 0.18);
+  --magenta:       #b8004a;
+  --magenta-dim:   rgba(184, 0, 74, 0.08);
+  --amber:         #9a6000;
+  --amber-dim:     rgba(154, 96, 0, 0.08);
+  --bull:          #007a2f;
+  --bear:          #c41a2a;
+  --neutral:       #6b7c8d;
+  --warning:       #9a6000;
+  --info:          #006fa8;
+  --text:          #0d1b2a;
+  --muted:         #7a93a8;
+  --text-secondary:#3d5566;
+  --border:        rgba(13, 27, 42, 0.12);
+  --border-strong: rgba(13, 27, 42, 0.28);
+}
+
+/* Disable scanlines on light background */
+html.light body::after { display: none; }
+
+/* Softer topbar */
+html.light header.topbar {
+  background: rgba(240, 244, 248, 0.97);
+  border-bottom-color: var(--border);
+}
+
+/* Cards: no corner accent glow, subtle shadow instead */
+html.light .card::before { opacity: 0.2; }
+html.light .card {
+  box-shadow: 0 1px 6px rgba(13, 27, 42, 0.08);
+}
+
+/* Brand glow */
+html.light .brand span { text-shadow: none; }
+
+/* Seal blend */
+html.light .header-seal {
+  mix-blend-mode: multiply;
+  filter: none;
+  opacity: 0.85;
+}
+
+/* Chart source tag */
+html.light .chart-source-tag {
+  background: rgba(0, 111, 168, 0.08);
+  border-color: rgba(0, 111, 168, 0.22);
+}
+
+/* Connector dots stay visible */
+html.light .dot.green { box-shadow: 0 0 6px rgba(0, 122, 47, 0.4); }
+html.light .dot.red   { box-shadow: 0 0 6px rgba(196, 26, 42, 0.4); }
+
+/* Toast */
+html.light .toast {
+  background: #ffffff;
+  border-left-color: var(--amber);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+}
+
+/* Focus ring in light mode */
+html.light input:focus,
+html.light button:focus-visible {
+  outline-color: rgba(0, 111, 168, 0.5);
+}
+
+/* ============================================================
    Mobile breakpoint
    ============================================================ */
 @media (max-width: 768px) {
