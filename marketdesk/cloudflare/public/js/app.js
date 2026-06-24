@@ -247,7 +247,10 @@ function checkAlerts(indicators) {
 // ---------- Shared real-time tick handler ----------
 // Aligns the 1m candle time to the current timeframe boundary before updating
 // the chart, so the pulse replaces the last candle instead of appending a new one.
+let lastTickAt = 0;
+
 function applyRealtimeTick(symbol, candle) {
+  lastTickAt = Date.now();
   if (SYMBOLS.includes(symbol)) {
     if (!tickerState[symbol]) tickerState[symbol] = { price: candle.close, changePercent: 0 };
     tickerState[symbol].price = candle.close;
@@ -378,8 +381,19 @@ document.addEventListener('DOMContentLoaded', () => {
   connectBinanceWS(); // starts Binance direct WS; falls back to DO relay if disabled/unavailable
 
   setInterval(fetchTickers, 5000);
-  setInterval(() => { if (activeTimeframe !== '1m') loadCandles(); }, 15000);
   setInterval(loadAnalysis, 15000);
   setInterval(loadPredictions, 60000);
   setInterval(loadHistory, 60000);
+
+  // Poll REST candles on non-1m timeframes, or on 1m when WS has been silent >30s.
+  setInterval(() => {
+    const wsSilent = Date.now() - lastTickAt > 30000;
+    if (activeTimeframe !== '1m' || wsSilent) loadCandles();
+    // If WS appears silent, force reconnect to both sources.
+    if (wsSilent) {
+      console.warn('[MarketDesk] No WS tick in 30s — forcing reconnect');
+      try { binanceWs?.close(); } catch {}
+      try { ws?.close(); } catch {}
+    }
+  }, 15000);
 });
