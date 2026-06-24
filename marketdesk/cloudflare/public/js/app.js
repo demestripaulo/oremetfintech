@@ -7,6 +7,7 @@ let alertsEnabled = true;
 let lastAlertState = { sr: null, rsi: null };
 
 let chart;
+let chartFitted = false;
 let tickerState = {};
 let ws;
 let wsReconnectAttempts = 0;
@@ -115,6 +116,7 @@ function renderTickerBar() {
     el.addEventListener('click', () => {
       activeSymbol = el.dataset.symbol;
       window.activeSymbol = activeSymbol;
+      chartFitted = false;
       renderTickerBar();
       loadAll();
     });
@@ -137,7 +139,7 @@ async function fetchTickers() {
 }
 
 // ---------- REST loaders ----------
-async function loadCandles() {
+async function loadCandles({ fit } = {}) {
   if (!chart) return [];
   setChartMessage(`${t('loadingCandles')} ${activeSymbol}...`);
   try {
@@ -147,7 +149,9 @@ async function loadCandles() {
     if (!Array.isArray(data.candles) || data.candles.length === 0) {
       throw new Error('API returned empty candles');
     }
-    chart.setCandles(data.candles);
+    const shouldFit = fit ?? !chartFitted;
+    chart.setCandles(data.candles, { fit: shouldFit });
+    chartFitted = true;
     clearChartMessage();
     const srcEl = $('chart-source');
     if (srcEl) srcEl.textContent = data.source ? `via ${data.source}` : '';
@@ -353,6 +357,7 @@ document.addEventListener('DOMContentLoaded', () => {
       document.querySelectorAll('.tf-btn').forEach((b) => b.classList.remove('active'));
       btn.classList.add('active');
       activeTimeframe = btn.dataset.tf;
+      chartFitted = false;
       Promise.allSettled([loadCandles(), loadAnalysis()]);
     });
   });

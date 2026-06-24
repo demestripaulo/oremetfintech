@@ -65,7 +65,7 @@ class MarketChart {
 
   _t(utc) { return utc + this.tzOffset; }
 
-  setCandles(candles) {
+  setCandles(candles, { fit = true } = {}) {
     const candleData = candles.map((c) => ({ time: this._t(c.time), open: c.open, high: c.high, low: c.low, close: c.close }));
     const volumeData = candles.map((c) => ({
       time: this._t(c.time),
@@ -78,7 +78,7 @@ class MarketChart {
     this.ema9Series.setData(emaLine(candles, 9, this.tzOffset));
     this.ema21Series.setData(emaLine(candles, 21, this.tzOffset));
     this.sma50Series.setData(smaLine(candles, 50, this.tzOffset));
-    this.chart.timeScale().fitContent();
+    if (fit) this.chart.timeScale().fitContent();
   }
 
   updateLastCandle(candle) {
