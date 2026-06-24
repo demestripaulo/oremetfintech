@@ -1,4 +1,4 @@
-const { API_BASE, WS_URL, USE_BINANCE_DIRECT_WS = true } = window.MARKETDESK_CONFIG;
+const { API_BASE, WS_URL } = window.MARKETDESK_CONFIG;
 
 const SYMBOLS = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT'];
 let activeSymbol = 'BTCUSDT';
@@ -11,16 +11,6 @@ let chartFitted = false;
 let tickerState = {};
 let ws;
 let wsReconnectAttempts = 0;
-
-// Binance direct WebSocket state
-const BINANCE_WS_URL = 'wss://stream.binance.com/stream?streams=' +
-  ['btcusdt', 'ethusdt', 'solusdt', 'bnbusdt', 'xrpusdt'].map(s => `${s}@kline_1m`).join('/');
-let binanceWs = null;
-let binanceReconnectAttempts = 0;
-let binanceWsActive = false;
-
-// Seconds per timeframe — used to align 1m ticks to the current candle's boundary.
-const TF_SECONDS = { '1m': 60, '5m': 300, '15m': 900, '1h': 3600, '4h': 14400, '1D': 86400 };
 
 function $(id) { return document.getElementById(id); }
 
@@ -248,87 +238,27 @@ function checkAlerts(indicators) {
   }
 }
 
-// ---------- Shared real-time tick handler ----------
-// Aligns the 1m candle time to the current timeframe boundary before updating
-// the chart, so the pulse replaces the last candle instead of appending a new one.
-let lastTickAt = 0;
-
-function applyRealtimeTick(symbol, candle) {
-  lastTickAt = Date.now();
-  if (SYMBOLS.includes(symbol)) {
-    if (!tickerState[symbol]) tickerState[symbol] = { price: candle.close, changePercent: 0 };
-    tickerState[symbol].price = candle.close;
-    renderTickerBar();
-  }
-  if (symbol !== activeSymbol) return;
-  const period = TF_SECONDS[activeTimeframe] || 60;
-  const aligned = { ...candle, time: candle.time - (candle.time % period) };
-  chart?.updateLastCandle(aligned);
-}
-
-// ---------- Binance direct WebSocket (primary) ----------
-function connectBinanceWS() {
-  if (!USE_BINANCE_DIRECT_WS) { connectWS(); return; }
-
-  try { binanceWs = new WebSocket(BINANCE_WS_URL); }
-  catch { connectWS(); return; }
-
-  binanceWs.addEventListener('open', () => {
-    binanceReconnectAttempts = 0;
-    binanceWsActive = true;
-    console.log('[MarketDesk] Binance direct WS connected');
-    connectWS(); // keep DO relay alive as fallback
-  });
-
-  binanceWs.addEventListener('message', (event) => {
-    let msg;
-    try { msg = JSON.parse(event.data); } catch { return; }
-    const k = msg.data?.k;
-    if (!k) return;
-    applyRealtimeTick(k.s, {
-      time: Math.floor(k.t / 1000),
-      open: parseFloat(k.o),
-      high: parseFloat(k.h),
-      low: parseFloat(k.l),
-      close: parseFloat(k.c),
-      volume: parseFloat(k.v),
-    });
-  });
-
-  binanceWs.addEventListener('close', () => { binanceWsActive = false; scheduleBinanceReconnect(); });
-  binanceWs.addEventListener('error', () => { binanceWsActive = false; scheduleBinanceReconnect(); });
-}
-
-function scheduleBinanceReconnect() {
-  binanceReconnectAttempts += 1;
-  const delay = Math.min(30000, 1000 * 2 ** binanceReconnectAttempts);
-  console.warn(`[MarketDesk] Binance WS disconnected, retry in ${delay}ms`);
-  setTimeout(connectBinanceWS, delay);
-}
-
-// ---------- DO relay WebSocket (fallback) ----------
+// ---------- WebSocket ----------
 function connectWS() {
   ws = new WebSocket(WS_URL);
 
   ws.addEventListener('open', () => {
     wsReconnectAttempts = 0;
-    console.log('[MarketDesk] DO relay WS connected');
+    console.log('[MarketDesk] WS connected');
   });
 
   ws.addEventListener('message', (event) => {
     let tick;
     try { tick = JSON.parse(event.data); } catch { return; }
     if (tick.type !== 'kline') return;
-    // Defer to Binance when active; relay still updates ticker as backup.
-    if (binanceWsActive) {
-      const sym = tick.symbol;
-      if (SYMBOLS.includes(sym)) {
-        if (!tickerState[sym]) tickerState[sym] = { price: tick.candle.close, changePercent: 0 };
-        tickerState[sym].price = tick.candle.close;
-      }
-      return;
+    const sym = tick.symbol;
+    if (SYMBOLS.includes(sym)) {
+      if (!tickerState[sym]) tickerState[sym] = { price: tick.candle.close, changePercent: 0 };
+      tickerState[sym].price = tick.candle.close;
+      renderTickerBar();
     }
-    applyRealtimeTick(tick.symbol, tick.candle);
+    if (sym !== activeSymbol) return;
+    chart?.updateLastCandle(tick.candle);
   });
 
   ws.addEventListener('close', scheduleWsReconnect);
@@ -338,7 +268,7 @@ function connectWS() {
 function scheduleWsReconnect() {
   wsReconnectAttempts += 1;
   const delay = Math.min(30000, 1000 * 2 ** wsReconnectAttempts);
-  console.warn(`[MarketDesk] DO relay WS disconnected, retry in ${delay}ms`);
+  console.warn(`[MarketDesk] WS disconnected, retry in ${delay}ms`);
   setTimeout(connectWS, delay);
 }
 
@@ -383,22 +313,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
   fetchTickers();
   loadAll();
-  connectBinanceWS(); // starts Binance direct WS; falls back to DO relay if disabled/unavailable
+  connectWS();
 
   setInterval(fetchTickers, 5000);
+  setInterval(() => { if (activeTimeframe !== '1m') loadCandles(); }, 15000);
   setInterval(loadAnalysis, 15000);
   setInterval(loadPredictions, 60000);
   setInterval(loadHistory, 60000);
-
-  // Poll REST candles on non-1m timeframes, or on 1m when WS has been silent >30s.
-  setInterval(() => {
-    const wsSilent = Date.now() - lastTickAt > 30000;
-    if (activeTimeframe !== '1m' || wsSilent) loadCandles();
-    // If WS appears silent, force reconnect to both sources.
-    if (wsSilent) {
-      console.warn('[MarketDesk] No WS tick in 30s — forcing reconnect');
-      try { binanceWs?.close(); } catch {}
-      try { ws?.close(); } catch {}
-    }
-  }, 15000);
 });
