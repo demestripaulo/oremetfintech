@@ -62,14 +62,34 @@ function playBeep() {
   } catch (e) { /* audio not available */ }
 }
 
+// ---------- NYSE-style alert ticker ----------
+const alertQueue = [];
+let alertRunning = false;
+
 function showToast(message) {
-  const container = $('toast-container');
-  const el = document.createElement('div');
-  el.className = 'toast';
-  el.textContent = message;
-  container.appendChild(el);
-  setTimeout(() => el.remove(), 8000);
   if (alertsEnabled) playBeep();
+  alertQueue.push(message);
+  if (!alertRunning) drainAlertQueue();
+}
+
+function drainAlertQueue() {
+  const strip = $('alert-strip');
+  const textEl = $('alert-strip-text');
+  if (alertQueue.length === 0) {
+    if (strip) strip.classList.remove('visible');
+    alertRunning = false;
+    return;
+  }
+  alertRunning = true;
+  if (!strip || !textEl) { alertQueue.length = 0; alertRunning = false; return; }
+  const msg = alertQueue.shift();
+  textEl.textContent = msg;
+  const duration = Math.max(7000, msg.length * 65);
+  strip.classList.add('visible');
+  textEl.style.animation = 'none';
+  void textEl.offsetWidth;
+  textEl.style.animation = `alert-marquee ${duration}ms linear forwards`;
+  setTimeout(drainAlertQueue, duration);
 }
 
 // ---------- Ticker bar ----------

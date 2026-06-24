@@ -77,15 +77,20 @@ a { color: inherit; }
    ============================================================ */
 header.topbar {
   display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 8px 16px;
+  flex-direction: column;
   background: rgba(6, 10, 15, 0.97);
   border-bottom: 1px solid var(--border);
   position: sticky;
   top: 0;
   z-index: 100;
   backdrop-filter: blur(8px);
+}
+
+.topbar-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 16px;
 }
 
 .header-seal {
@@ -189,6 +194,7 @@ header.topbar {
   background: var(--cyan-dim);
   text-shadow: 0 0 8px rgba(0, 212, 255, 0.4);
 }
+.lang-switcher { position: relative; z-index: 1; overflow: hidden; border-radius: 4px; }
 
 /* ============================================================
    Layout grid
@@ -712,6 +718,59 @@ footer.disclaimer {
 .ask-claude-btn:hover { border-color: var(--cyan); color: var(--cyan); }
 
 /* ============================================================
+   Alert strip — NYSE-style scrolling ticker in header
+   ============================================================ */
+.alert-strip {
+  display: none;
+  align-items: center;
+  gap: 10px;
+  padding: 3px 16px;
+  background: rgba(255, 183, 0, 0.06);
+  border-top: 1px solid rgba(255, 183, 0, 0.18);
+  height: 24px;
+  overflow: hidden;
+}
+.alert-strip.visible { display: flex; }
+
+.alert-strip-label {
+  flex-shrink: 0;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: var(--amber);
+  font-family: 'JetBrains Mono', monospace;
+  border-right: 1px solid rgba(255, 183, 0, 0.3);
+  padding-right: 10px;
+}
+
+.alert-strip-track {
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+}
+
+.alert-strip-text {
+  display: inline-block;
+  white-space: nowrap;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: var(--text);
+  will-change: transform;
+}
+
+@keyframes alert-marquee {
+  from { transform: translateX(100vw); }
+  to   { transform: translateX(-100%); }
+}
+
+html.light .alert-strip {
+  background: rgba(154, 96, 0, 0.06);
+  border-top-color: rgba(154, 96, 0, 0.2);
+}
+html.light .alert-strip-label { color: var(--amber); }
+html.light .alert-strip-text  { color: var(--text); }
+
+/* ============================================================
    Toast / alerts
    ============================================================ */
 #toast-container {
@@ -799,8 +858,11 @@ html.light {
 html.light body::after { display: none; }
 
 /* Softer topbar */
-html.light header.topbar {
+html.light header.topbar,
+html.light .topbar-row {
   background: rgba(240, 244, 248, 0.97);
+}
+html.light header.topbar {
   border-bottom-color: var(--border);
 }
 
@@ -813,11 +875,11 @@ html.light .card {
 /* Brand glow */
 html.light .brand span { text-shadow: none; }
 
-/* Seal blend */
+/* Seal — invert white elements so they're visible on white background */
 html.light .header-seal {
-  mix-blend-mode: multiply;
-  filter: none;
-  opacity: 0.85;
+  mix-blend-mode: normal;
+  filter: invert(1) brightness(0.55);
+  opacity: 1;
 }
 
 /* Chart source tag */
