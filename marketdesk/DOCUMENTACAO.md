@@ -116,10 +116,13 @@ Cache em memória de 5s, throttle mínimo de 120ms entre requisições.
 
 ### `websocket.js` — Durable Object MarketHub
 
-Relay do stream de ticker Coinbase → Kraken (fallback) para os 5 símbolos ativos.
-Monta candles de 1m a partir de eventos de ticker (`last_size` para volume real).
-Reconecta com backoff exponencial 1s → 30s. Distribui via broadcast para todos
-os clientes WebSocket conectados.
+Relay do stream de ticker **Kraken → Coinbase** (fallback) para os 5 símbolos ativos.
+Monta candles de 1m a partir de eventos de ticker (volume via `v[0]` no Kraken,
+`last_size` no Coinbase). Reconecta com backoff exponencial 1s → 30s.
+Distribui via broadcast para todos os clientes WebSocket conectados.
+
+> ⚠️ Este relay atua como **fallback** quando o Binance direct WS do frontend
+> não está disponível. Ver seção 4 (`app.js`) para a arquitetura de dois estágios.
 
 ### `connectors.js` — integrações externas
 
@@ -140,10 +143,25 @@ Todas degradam graciosamente (retornam `{ error }` sem quebrar o painel):
 ### `app.js`
 
 Controller principal. Gerencia:
-- Ticker bar (polling REST a cada 5s + atualização via WebSocket)
+- Ticker bar (polling REST a cada 5s + atualização via WebSocket em tempo real)
 - `loadAll()`: `loadCandles` + `loadAnalysis` + `loadPredictions` + `loadHistory`
-- WebSocket com reconexão exponencial; só atualiza o último candle no gráfico quando `activeTimeframe === '1m'`
-- Exibe `source` (exchange) recebida de `/api/candles` discretamente no cabeçalho do gráfico
+- Polling de candles a cada 15s quando fora do timeframe 1m
+- Exibe `source` (exchange) recebida de `/api/candles` no cabeçalho do gráfico
+
+#### Arquitetura WebSocket de dois estágios
+
+```
+Estágio 1 (primário)  — Binance direct WS — browser → wss://stream.binance.com
+Estágio 2 (fallback)  — DO relay          — browser → /ws → Durable Object → Kraken/Coinbase
+```
+
+**Binance direct WS** (`connectBinanceWS`): abre `stream.binance.com/stream?streams=btcusdt@kline_1m/...` diretamente do browser, eliminando o hop do Cloudflare DO. O stream `@kline_1m` da Binance publica OHLCV completo a cada ~2s enquanto o candle está se formando. Quando ativo (`binanceWsActive = true`), o DO relay só atualiza o ticker bar como backup; o gráfico usa apenas o feed Binance.
+
+**DO relay** (`connectWS`): permanece conectado como fallback. Assume o controle do gráfico automaticamente se o Binance WS cair.
+
+**`applyRealtimeTick(symbol, candle)`**: função compartilhada pelos dois estágios. Alinha o timestamp do tick de 1m ao bucket do timeframe ativo (`candle.time - candle.time % period`) antes de chamar `chart.updateLastCandle()`, garantindo que o candle existente seja atualizado em vez de um novo ser adicionado ao gráfico.
+
+**Feature flag** para reverter: em `index.html`, setar `USE_BINANCE_DIRECT_WS: false` no `MARKETDESK_CONFIG` desativa o Binance WS e usa somente o DO relay.
 
 ### `chart.js`
 

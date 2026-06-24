@@ -118,6 +118,9 @@
   window.MARKETDESK_CONFIG = {
     API_BASE: window.location.origin,
     WS_URL: (window.location.protocol === 'https:' ? 'wss://' : 'ws://') + window.location.host + '/ws',
+    // Direct browser→Binance WebSocket for lower-latency real-time candle updates.
+    // Set to false to revert to the Cloudflare DO relay (Kraken/Coinbase) only.
+    USE_BINANCE_DIRECT_WS: true,
   };
 </script>
 <script src="js/i18n.js?v=6"></script>
