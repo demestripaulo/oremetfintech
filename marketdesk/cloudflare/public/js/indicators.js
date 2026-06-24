@@ -10,6 +10,62 @@ function badgeLabel(status) {
   return t('neutral');
 }
 
+function renderTradeFilter(filter) {
+  const container = document.getElementById('tradefilter-container');
+  if (!container) return;
+  if (!filter) {
+    container.innerHTML = `<p class="panel-message">${t('loadingIndicators')}</p>`;
+    return;
+  }
+
+  const { signal, label, reason, noTradeScore, bullScore, bearScore, details } = filter;
+
+  const signalClass = {
+    NO_TRADE: 'tf-no-trade',
+    WAIT: 'tf-wait',
+    FAVORABLE_BULL: 'tf-bull',
+    FAVORABLE_BEAR: 'tf-bear',
+  }[signal] || 'tf-wait';
+
+  const scoreRows = [
+    { key: 'tfBullScore',    val: bullScore,    max: 6, cls: 'tf-bar-bull' },
+    { key: 'tfBearScore',    val: bearScore,    max: 6, cls: 'tf-bar-bear' },
+    { key: 'tfNoTradeScore', val: noTradeScore, max: 7, cls: 'tf-bar-notrade' },
+  ];
+
+  const detailRows = [
+    { key: 'RSI',             value: details.rsi },
+    { key: t('tfVolume'),     value: `${details.volumeRatio}x ${t('tfAvg')}` },
+    { key: t('tfCandleBody'), value: `${details.candleBodyPct}% ATR` },
+    { key: t('tfStructure'),  value: `${details.marketStructureScore > 0 ? '+' : ''}${details.marketStructureScore}` },
+    { key: t('tfATR'),        value: details.atr },
+    { key: t('tfDistR1'),     value: `${details.distToR1Pct}%` },
+    { key: t('tfDistS1'),     value: `${details.distToS1Pct}%` },
+  ];
+
+  container.innerHTML = `
+    <div class="tf-badge ${signalClass}">${label}</div>
+    <div class="tf-reason">${reason}</div>
+    <div class="tf-scores">
+      ${scoreRows.map(r => `
+        <div class="tf-score-row">
+          <span class="tf-score-name">${t(r.key)}</span>
+          <div class="tf-score-bar-wrap">
+            <div class="tf-score-bar ${r.cls}" style="width:${Math.round(r.val / r.max * 100)}%"></div>
+          </div>
+          <span class="tf-score-val">${r.val}/${r.max}</span>
+        </div>`).join('')}
+    </div>
+    <div class="tf-details">
+      ${detailRows.map(r => `
+        <div class="tf-detail-row">
+          <span>${r.key}</span><span class="mono">${r.value}</span>
+        </div>`).join('')}
+    </div>
+    <p class="tf-disclaimer">${t('tfDisclaimer')}</p>
+  `;
+}
+
 function renderIndicators(data) {
   const container = document.getElementById('indicators-container');
   if (!data) {
@@ -82,6 +138,7 @@ function renderIndicators(data) {
   renderSupportResistance(data.pivots, data.price);
   renderConnectors(data);
   renderMarketStructure(data.marketStructure);
+  renderTradeFilter(data.tradeFilter);
 }
 
 function renderSupportResistance(pivots, price) {

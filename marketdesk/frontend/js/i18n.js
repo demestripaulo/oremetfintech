@@ -78,6 +78,14 @@ const I18N = {
     externalUnavailable: 'External intelligence unavailable: ',
     noNews: 'No relevant news in the last 2 hours.',
     newsUnavailable: 'News feed unavailable: ',
+    // Trade Filter
+    tradeFilterTitle: 'Kalshi Trade Filter',
+    tfBullScore: 'Bull', tfBearScore: 'Bear', tfNoTradeScore: 'No-Trade',
+    tfVolume: 'Volume', tfCandleBody: 'Candle body',
+    tfStructure: 'Structure', tfATR: 'ATR',
+    tfDistR1: 'Dist. to R1', tfDistS1: 'Dist. to S1',
+    tfDisclaimer: 'Educational signal only. Not financial advice.',
+    tfAvg: 'avg',
   },
 
   pt: {
@@ -156,6 +164,14 @@ const I18N = {
     externalUnavailable: 'Inteligência externa indisponível: ',
     noNews: 'Nenhuma notícia relevante nas últimas 2 horas.',
     newsUnavailable: 'Feed de notícias indisponível: ',
+    // Trade Filter
+    tradeFilterTitle: 'Kalshi Trade Filter',
+    tfBullScore: 'Bull', tfBearScore: 'Bear', tfNoTradeScore: 'No-Trade',
+    tfVolume: 'Volume', tfCandleBody: 'Corpo do candle',
+    tfStructure: 'Estrutura', tfATR: 'ATR',
+    tfDistR1: 'Dist. até R1', tfDistS1: 'Dist. até S1',
+    tfDisclaimer: 'Sinal educacional. Não constitui conselho financeiro.',
+    tfAvg: 'média',
   },
 };
 

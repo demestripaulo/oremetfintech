@@ -187,29 +187,41 @@ export function calculatePivotPoints(candles) {
 
 export function buildIndicatorPanel(candles, lang = 'en') {
   const price = candles[candles.length - 1].close;
-  const rsi = calculateRSI(candles, 14);
+  const rsiVal = calculateRSI(candles, 14);
   const macd = calculateMACD(candles);
   const bb = calculateBollinger(candles, 20, 2);
-  const atr = calculateATR(candles, 14);
-  const volRatio = volumeRatio(candles, 20);
+  const atrVal = calculateATR(candles, 14);
+  const volRatioVal = volumeRatio(candles, 20);
   const pattern = detectCandlePattern(candles);
   const ema9 = ema(candles.map((c) => c.close), 9);
   const ema21 = ema(candles.map((c) => c.close), 21);
   const sma50 = sma(candles.map((c) => c.close), 50);
+  const pivots = calculatePivotPoints(candles);
+  const ms = detectMarketStructure(candles, pivots, atrVal, lang);
 
-  const rsiStatus = rsi > 70 ? 'SELL' : rsi < 30 ? 'BUY' : 'NEUTRAL';
+  const rsiStatus = rsiVal > 70 ? 'SELL' : rsiVal < 30 ? 'BUY' : 'NEUTRAL';
   const macdStatus = macd.direction === 'bullish' ? 'BUY' : macd.direction === 'bearish' ? 'SELL' : 'NEUTRAL';
   const bbStatus = price > bb.upper ? 'SELL' : price < bb.lower ? 'BUY' : 'NEUTRAL';
-  const volStatus = volRatio > 1.2 ? 'BUY' : volRatio < 0.7 ? 'SELL' : 'NEUTRAL';
-
+  const volStatus = volRatioVal > 1.2 ? 'BUY' : volRatioVal < 0.7 ? 'SELL' : 'NEUTRAL';
   const isEn = lang !== 'pt';
+
+  const tradeFilter = calculateTradeFilter(candles, {
+    price,
+    rsi: { value: round(rsiVal, 2) },
+    macd: { ...macd, histogram: round(macd.histogram, 4) },
+    atr: { value: round(atrVal, 2) },
+    volume: { ratio: round(volRatioVal, 2) },
+    pattern,
+    pivots,
+    marketStructure: ms,
+  }, lang);
 
   return {
     price,
     ema9,
     ema21,
     sma50,
-    rsi: { value: round(rsi, 2), status: rsiStatus, explanation: isEn
+    rsi: { value: round(rsiVal, 2), status: rsiStatus, explanation: isEn
       ? 'RSI measures price movement speed; above 70 suggests overbought, below 30 oversold.'
       : 'RSI mede a velocidade dos movimentos de preço; acima de 70 sugere sobrecompra, abaixo de 30 sobrevenda.' },
     macd: { ...macd, macd: round(macd.macd, 2), signal: round(macd.signal, 2), histogram: round(macd.histogram, 2), status: macdStatus, explanation: isEn
@@ -218,15 +230,204 @@ export function buildIndicatorPanel(candles, lang = 'en') {
     bollinger: { upper: round(bb.upper, 2), middle: round(bb.middle, 2), lower: round(bb.lower, 2), status: bbStatus, explanation: isEn
       ? 'Bollinger Bands show volatility; price touching the upper/lower band may indicate exhaustion of the move.'
       : 'Bollinger Bands mostram a volatilidade; preço tocando a banda superior/inferior pode indicar exaustão do movimento.' },
-    atr: { value: round(atr, 2), explanation: isEn
+    atr: { value: round(atrVal, 2), explanation: isEn
       ? 'ATR measures average recent volatility in absolute price value, used to estimate future ranges.'
       : 'ATR mede a volatilidade média recente em valor absoluto de preço, usado para estimar ranges futuros.' },
-    volume: { ratio: round(volRatio, 2), status: volStatus, explanation: isEn
+    volume: { ratio: round(volRatioVal, 2), status: volStatus, explanation: isEn
       ? 'Compares current volume to the 20-candle average; high volume confirms the strength of the move.'
       : 'Compara o volume atual com a média das últimas 20 velas; volume alto confirma a força do movimento.' },
     pattern: { ...pattern, explanation: patternExplanation(pattern.name, isEn) },
-    pivots: calculatePivotPoints(candles),
-    marketStructure: detectMarketStructure(candles, calculatePivotPoints(candles), atr, lang),
+    pivots,
+    marketStructure: ms,
+    tradeFilter,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Trade Filter — Kalshi 15-min decision aid
+// ---------------------------------------------------------------------------
+
+export const TRADE_FILTER_CONFIG = {
+  noTrade: {
+    rsiMin: 40, rsiMax: 60,
+    candleBodyRatio: 0.35,
+    structureMin: -1, structureMax: 1,
+    minScore: 5,
+  },
+  bull: {
+    rsiThreshold: 55,
+    candleBodyRatio: 0.5,
+    structureMin: 2,
+    minScore: 4,
+  },
+  bear: {
+    rsiThreshold: 45,
+    candleBodyRatio: 0.5,
+    structureMax: -2,
+    minScore: 4,
+  },
+};
+
+export function calculateTradeFilter(candles, indicators, lang = 'en') {
+  if (!candles || candles.length < 5 || !indicators) {
+    return { signal: 'WAIT', label: 'AGUARDAR CONFIRMAÇÃO', reason: 'Dados insuficientes.', noTradeScore: 0, bullScore: 0, bearScore: 0, details: {} };
+  }
+
+  const cfg = TRADE_FILTER_CONFIG;
+  const isEn = lang !== 'pt';
+  const { price, rsi, macd, atr, volume, pivots, marketStructure, pattern } = indicators;
+
+  const rsiVal = rsi.value;
+  const atrVal = atr.value;
+  const volRatioVal = volume.ratio;
+  const msScore = marketStructure?.score ?? 0;
+  const msEvents = marketStructure?.events || [];
+  const macdHist = macd.histogram;
+  const macdDir = macd.direction;
+
+  const lastCandle = candles[candles.length - 1];
+  const candleBody = Math.abs(lastCandle.close - lastCandle.open);
+  const { pivot, r1, s1 } = pivots;
+  const tolerance = atrVal * 0.15;
+
+  // Structural events from detectMarketStructure
+  const hasConfirmedBreakout = msEvents.some(e =>
+    ['RESISTANCE_BREAK', 'SUPPORT_RECOVERY', 'FALSE_BREAKDOWN'].includes(e.pattern));
+  const hasConfirmedRetest = msEvents.some(e =>
+    ['RETEST_FROM_ABOVE', 'RETEST_REJECTION'].includes(e.pattern));
+  const hasFalseBreakout = msEvents.some(e =>
+    ['FALSE_BREAKOUT', 'FALSE_BREAKDOWN'].includes(e.pattern));
+  const bullishEvent = msEvents.some(e => e.bias === 'bullish');
+  const bearishEvent = msEvents.some(e => e.bias === 'bearish');
+
+  // Higher lows / lower highs
+  const W = Math.min(15, candles.length);
+  const struct = candles.slice(-W);
+  const third = Math.max(1, Math.floor(W / 3));
+  const earlyLow  = Math.min(...struct.slice(0, third).map(c => c.low));
+  const lateLow   = Math.min(...struct.slice(-third).map(c => c.low));
+  const earlyHigh = Math.max(...struct.slice(0, third).map(c => c.high));
+  const lateHigh  = Math.max(...struct.slice(-third).map(c => c.high));
+  const hasHigherLows = lateLow > earlyLow + tolerance;
+  const hasLowerHighs = lateHigh < earlyHigh - tolerance;
+
+  // ---- NO TRADE ----
+  const isNeutralRSI       = rsiVal >= cfg.noTrade.rsiMin && rsiVal <= cfg.noTrade.rsiMax;
+  const isLowVolume        = volRatioVal < 1.0;
+  const isSmallCandle      = atrVal > 0 && candleBody < atrVal * cfg.noTrade.candleBodyRatio;
+  const isInsideCentral    = (price > pivot && price < r1) || (price > s1 && price < pivot);
+  const isNeutralStructure = msScore >= cfg.noTrade.structureMin && msScore <= cfg.noTrade.structureMax;
+  const noMacdConviction   = macdDir === 'neutral';
+
+  const noTradeChecks = [
+    isNeutralRSI, isLowVolume, isSmallCandle, isInsideCentral,
+    isNeutralStructure, !hasConfirmedBreakout, !hasConfirmedRetest,
+  ];
+  const noTradeScore = noTradeChecks.filter(Boolean).length;
+
+  // ---- BULL ----
+  const rsiRisingFromOversold = rsiVal > 30 && rsiVal <= cfg.bull.rsiThreshold && macdDir === 'bullish';
+  const bullishMomentum   = rsiVal > cfg.bull.rsiThreshold || rsiRisingFromOversold;
+  const strongGreenCandle = lastCandle.close > lastCandle.open && atrVal > 0 && candleBody >= atrVal * cfg.bull.candleBodyRatio;
+  const volumeConfirmation = volRatioVal >= 1.0;
+  const bullishStructure  = msScore >= cfg.bull.structureMin || hasHigherLows || bullishEvent;
+  const bullishBreakout   = lastCandle.close > r1
+    || (hasFalseBreakout && lastCandle.close > pivot)
+    || msEvents.some(e => e.pattern === 'RETEST_FROM_ABOVE');
+  const macdImproving     = macdDir === 'bullish' || macdHist > 0;
+
+  const bullChecks = [
+    bullishMomentum, strongGreenCandle, volumeConfirmation,
+    bullishStructure, bullishBreakout, macdImproving,
+  ];
+  const bullScore = bullChecks.filter(Boolean).length;
+
+  // ---- BEAR ----
+  const rsiFallingFromOverbought = rsiVal < 70 && rsiVal >= cfg.bear.rsiThreshold && macdDir === 'bearish';
+  const bearishMomentum   = rsiVal < cfg.bear.rsiThreshold || rsiFallingFromOverbought;
+  const strongRedCandle   = lastCandle.close < lastCandle.open && atrVal > 0 && candleBody >= atrVal * cfg.bear.candleBodyRatio;
+  const bearishStructure  = msScore <= cfg.bear.structureMax || hasLowerHighs || bearishEvent;
+  const bearishBreakdown  = lastCandle.close < s1
+    || (hasFalseBreakout && lastCandle.close < pivot)
+    || msEvents.some(e => e.pattern === 'RETEST_REJECTION');
+  const macdWeakening     = macdDir === 'bearish' || macdHist < 0;
+
+  const bearChecks = [
+    bearishMomentum, strongRedCandle, volumeConfirmation,
+    bearishStructure, bearishBreakdown, macdWeakening,
+  ];
+  const bearScore = bearChecks.filter(Boolean).length;
+
+  // ---- WAIT ----
+  const touchingLevel = atrVal > 0 && (
+    Math.abs(price - r1) < tolerance * 2 ||
+    Math.abs(price - s1) < tolerance * 2 ||
+    Math.abs(price - pivot) < tolerance * 2
+  );
+
+  // ---- Signal ----
+  let signal, label, reason;
+
+  if (bullScore >= cfg.bull.minScore && bullScore > bearScore) {
+    signal = 'FAVORABLE_BULL';
+    label = isEn ? 'FAVORABLE BULL' : 'CONDIÇÃO FAVORÁVEL BULL';
+    reason = isEn
+      ? 'Buyers in control: breakout/retest/recovery with momentum.'
+      : 'Compradores demonstram controle: rompimento/reteste/recuperação com momentum.';
+  } else if (bearScore >= cfg.bear.minScore && bearScore > bullScore) {
+    signal = 'FAVORABLE_BEAR';
+    label = isEn ? 'FAVORABLE BEAR' : 'CONDIÇÃO FAVORÁVEL BEAR';
+    reason = isEn
+      ? 'Sellers in control: rejection/support loss/failed retest.'
+      : 'Vendedores demonstram controle: rejeição/perda de suporte/reteste falhado.';
+  } else if (noTradeScore >= cfg.noTrade.minScore) {
+    signal = 'NO_TRADE';
+    label = isEn ? 'DO NOT TRADE' : 'NÃO OPERAR';
+    const parts = [];
+    if (isNeutralRSI) parts.push(isEn ? `neutral RSI (${rsiVal.toFixed(0)})` : `RSI neutro (${rsiVal.toFixed(0)})`);
+    if (isLowVolume)  parts.push(isEn ? 'low volume' : 'volume baixo');
+    if (isSmallCandle) parts.push(isEn ? 'small candles' : 'candles pequenos');
+    if (isInsideCentral) parts.push(isEn ? 'price in chop zone' : 'preço em zona lateral');
+    if (isNeutralStructure) parts.push(isEn ? `weak structure (${msScore})` : `estrutura fraca (${msScore})`);
+    reason = parts.slice(0, 3).join(' + ') + '. '
+      + (isEn ? 'High noise risk in 15-min Kalshi window.' : 'Alto risco de ruído em janela Kalshi de 15 minutos.');
+  } else if (touchingLevel || (bullScore >= 2 && bearScore >= 2)) {
+    signal = 'WAIT';
+    label = isEn ? 'WAIT FOR CONFIRMATION' : 'AGUARDAR CONFIRMAÇÃO';
+    reason = isEn
+      ? 'Key level being tested — no confirmed close/retest yet.'
+      : 'Nível técnico em teste, mas ainda sem fechamento/reteste confirmado.';
+  } else {
+    signal = 'NO_TRADE';
+    label = isEn ? 'DO NOT TRADE' : 'NÃO OPERAR';
+    reason = isEn
+      ? 'Insufficient conditions. Wait for a clear setup.'
+      : 'Condições insuficientes para operação. Aguardar setup claro.';
+  }
+
+  const distToR1Pct = price > 0 ? round((r1 - price) / price * 100, 2) : 0;
+  const distToS1Pct = price > 0 ? round((price - s1) / price * 100, 2) : 0;
+
+  return {
+    signal,
+    label,
+    reason,
+    noTradeScore,
+    bullScore,
+    bearScore,
+    details: {
+      rsi: round(rsiVal, 1),
+      volumeRatio: round(volRatioVal, 2),
+      candleBodyPct: atrVal > 0 ? Math.round((candleBody / atrVal) * 100) : 0,
+      insideCentralZone: isInsideCentral,
+      hasBreakout: hasConfirmedBreakout,
+      hasRetest: hasConfirmedRetest,
+      marketStructureScore: msScore,
+      macdHistogram: round(macdHist, 4),
+      atr: round(atrVal, 2),
+      distToR1Pct,
+      distToS1Pct,
+    },
   };
 }
 

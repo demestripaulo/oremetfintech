@@ -762,3 +762,120 @@ input:focus, button:focus-visible {
   #chart-container { height: clamp(280px, 45vh, 380px); }
   .intel-grid { grid-template-columns: 1fr; }
 }
+
+/* ============================================================
+   Kalshi Trade Filter
+   ============================================================ */
+.tf-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 14px;
+  border-radius: 4px;
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 0.07em;
+  text-align: center;
+  margin-bottom: 10px;
+  font-family: 'JetBrains Mono', monospace;
+}
+.tf-no-trade {
+  background: rgba(255, 45, 120, 0.10);
+  border: 2px solid var(--magenta);
+  color: var(--magenta);
+  box-shadow: 0 0 12px rgba(255, 45, 120, 0.18);
+}
+.tf-wait {
+  background: rgba(255, 183, 0, 0.08);
+  border: 2px solid var(--amber);
+  color: var(--amber);
+  box-shadow: 0 0 12px rgba(255, 183, 0, 0.14);
+}
+.tf-bull {
+  background: rgba(0, 255, 156, 0.08);
+  border: 2px solid var(--bull);
+  color: var(--bull);
+  box-shadow: 0 0 12px rgba(0, 255, 156, 0.14);
+}
+.tf-bear {
+  background: rgba(255, 51, 102, 0.10);
+  border: 2px solid var(--bear);
+  color: var(--bear);
+  box-shadow: 0 0 12px rgba(255, 51, 102, 0.18);
+}
+
+.tf-reason {
+  font-size: 11px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  margin-bottom: 12px;
+  padding: 8px 10px;
+  background: rgba(0,0,0,0.2);
+  border-left: 2px solid var(--border-strong);
+  border-radius: 0 3px 3px 0;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.tf-scores { margin-bottom: 10px; }
+.tf-score-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 5px;
+}
+.tf-score-name {
+  font-size: 10px;
+  color: var(--muted);
+  width: 64px;
+  flex-shrink: 0;
+  font-family: 'JetBrains Mono', monospace;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.tf-score-bar-wrap {
+  flex: 1;
+  height: 5px;
+  background: rgba(255,255,255,0.05);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.tf-score-bar {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.4s ease;
+}
+.tf-bar-bull    { background: var(--bull); }
+.tf-bar-bear    { background: var(--bear); }
+.tf-bar-notrade { background: var(--magenta); }
+.tf-score-val {
+  font-size: 10px;
+  color: var(--text-secondary);
+  width: 28px;
+  text-align: right;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.tf-details {
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+  margin-bottom: 8px;
+}
+.tf-detail-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px;
+  padding: 2px 0;
+  color: var(--text-secondary);
+  font-family: 'JetBrains Mono', monospace;
+}
+.tf-detail-row span:first-child { color: var(--muted); }
+
+.tf-disclaimer {
+  font-size: 9px;
+  color: var(--muted);
+  margin: 0;
+  padding-top: 6px;
+  border-top: 1px solid var(--border);
+  font-family: 'JetBrains Mono', monospace;
+  line-height: 1.4;
+}
