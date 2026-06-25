@@ -128,13 +128,18 @@ export default {
         const fifteenMin = predictRange(candles, '15min');
         const oneHour = predictRange(candles, '1h');
         const daily = predictRange(candles, 'daily');
+        const currentPrice = candles[candles.length - 1].close;
+
+        // Resolve past entries whose 15-min window has closed.
+        await resolvePastPredictions(env, symbol, currentPrice);
+
         await persistPredictionLog(env, {
           symbol,
           generatedAt: Date.now(),
           fifteenMin,
           oneHour,
           daily,
-          priceAtGeneration: candles[candles.length - 1].close,
+          priceAtGeneration: currentPrice,
         });
       } catch (err) {
         console.error('scheduled analysis failed for', symbol, err);
@@ -157,4 +162,27 @@ async function persistPredictionLog(env, record) {
 async function readPredictionLog(env, symbol) {
   const raw = await env.MARKET_KV.get(`log:${symbol}`);
   return raw ? JSON.parse(raw) : [];
+}
+
+// For each unresolved entry whose 15-min window has expired, stamp resolved_price
+// and mark whether the actual price fell inside the predicted range.
+async function resolvePastPredictions(env, symbol, currentPrice) {
+  const key = `log:${symbol}`;
+  const raw = await env.MARKET_KV.get(key);
+  if (!raw) return;
+  const log = JSON.parse(raw);
+  const FIFTEEN_MIN_MS = 15 * 60 * 1000;
+  const now = Date.now();
+  let changed = false;
+  for (const entry of log) {
+    if (entry.resolved_price != null) continue;
+    if (now - entry.generatedAt < FIFTEEN_MIN_MS) continue;
+    const low  = entry.fifteenMin?.range_low;
+    const high = entry.fifteenMin?.range_high;
+    if (low == null || high == null) continue;
+    entry.resolved_price = currentPrice;
+    entry.hit = currentPrice >= low && currentPrice <= high;
+    changed = true;
+  }
+  if (changed) await env.MARKET_KV.put(key, JSON.stringify(log));
 }
