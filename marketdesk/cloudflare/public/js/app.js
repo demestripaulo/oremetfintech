@@ -241,7 +241,7 @@ function checkAlerts(indicators) {
 // ---------- Countdown prediction refreshes ----------
 // Fires loadPredictions at T-15m, T-10m, T-5m, T-3m, T-1m before each
 // 15-minute Kalshi window boundary (:00, :15, :30, :45 of each hour).
-const PRED_COUNTDOWN_MARKS = [15 * 60, 10 * 60, 5 * 60, 3 * 60, 60]; // seconds before boundary
+const PRED_COUNTDOWN_MARKS = [15 * 60, 10 * 60, 5 * 60, 4 * 60, 3 * 60, 2 * 60, 60]; // seconds before boundary
 
 function scheduleCountdownRefreshes() {
   const nowSec = Date.now() / 1000;
