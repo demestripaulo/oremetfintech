@@ -27,9 +27,9 @@ const I18N = {
     // S/R table
     srLevel: 'Level', srPrice: 'Price', srDistance: 'Distance',
     // Predictions
-    next15min: 'Next 15 minutes (Kalshi 15-min)',
-    nextHour: 'Next hour (Kalshi Hourly)',
-    dailyClose: '5PM ET Close (Kalshi Daily)',
+    next15min: 'Next 15 minutes',
+    nextHour: 'Next hour',
+    dailyClose: '5PM ET Close',
     midpoint: 'Midpoint', confidence: 'Confidence',
     generatingPredictions: 'Generating educational forecasts...',
     // History
@@ -113,9 +113,9 @@ const I18N = {
     // S/R table
     srLevel: 'Nível', srPrice: 'Preço', srDistance: 'Distância',
     // Predictions
-    next15min: 'Próximos 15 minutos (Kalshi 15-min)',
-    nextHour: 'Próxima hora (Kalshi Hourly)',
-    dailyClose: 'Fechamento 17h ET (Kalshi Daily)',
+    next15min: 'Próximos 15 minutos',
+    nextHour: 'Próxima hora',
+    dailyClose: 'Fechamento 17h ET',
     midpoint: 'Ponto médio', confidence: 'Confiança',
     generatingPredictions: 'Gerando previsões educacionais...',
     // History

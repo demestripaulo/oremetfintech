@@ -25,11 +25,21 @@ function getTimeWindow(interval) {
   return '→ 5:00 PM ET';
 }
 
-function renderPredictionCard(p) {
+function fmtUpdatedAt() {
+  const TZ_OFFSET_MS = -4 * 3600 * 1000;
+  const d = new Date(Date.now() + TZ_OFFSET_MS);
+  const h = d.getUTCHours();
+  const m = d.getUTCMinutes();
+  const pad = (n) => String(n).padStart(2, '0');
+  const ap = h >= 12 ? 'PM' : 'AM';
+  return `${h % 12 || 12}:${pad(m)} ET`;
+}
+
+function renderPredictionCard(p, updatedAt) {
   let label;
   if (p.interval === '15min') label = t('next15min');
   else if (p.interval === '1h') label = t('nextHour');
-  else label = `${t('dailyClose')}${p.kalshiTarget ? ' — ' + p.kalshiTarget : ''}`;
+  else label = t('dailyClose');
   const timeWindow = getTimeWindow(p.interval);
   label = `${label} · ${timeWindow}`;
 
@@ -43,6 +53,7 @@ function renderPredictionCard(p) {
         <span class="badge ${p.bias === 'bullish' ? 'buy' : p.bias === 'bearish' ? 'sell' : 'neutral'}">${biasTip}</span>
       </div>
       <div class="prediction-range mono">${p.range_low.toFixed(2)} — ${p.range_high.toFixed(2)}</div>
+      <div class="prediction-updated">↻ ${updatedAt}</div>
       <div class="indicator-explain">${t('midpoint')}: ${p.midpoint.toFixed(2)} · ${t('confidence')}: ${p.confidence}%</div>
       <div class="confidence-bar-bg"><div class="confidence-bar-fill" style="width:${p.confidence}%"></div></div>
       <div class="prediction-explain">${p.explanation}</div>
@@ -56,8 +67,9 @@ function renderPredictions(data) {
     container.innerHTML = `<p class="indicator-explain">${t('generatingPredictions')}</p>`;
     return;
   }
-  const cards = [renderPredictionCard(data.fifteenMin), renderPredictionCard(data.oneHour)];
-  if (data.daily) cards.push(renderPredictionCard(data.daily));
+  const updatedAt = fmtUpdatedAt();
+  const cards = [renderPredictionCard(data.fifteenMin, updatedAt), renderPredictionCard(data.oneHour, updatedAt)];
+  if (data.daily) cards.push(renderPredictionCard(data.daily, updatedAt));
   container.innerHTML = cards.join('');
 }
 

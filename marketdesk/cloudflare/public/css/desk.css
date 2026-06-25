@@ -441,6 +441,13 @@ main.layout {
 .confidence-bar-fill { height: 100%; background: var(--cyan); }
 .prediction-card.bullish .confidence-bar-fill { background: var(--bull); }
 .prediction-card.bearish .confidence-bar-fill { background: var(--bear); }
+.prediction-updated {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  color: var(--muted);
+  margin: -2px 0 6px;
+  letter-spacing: 0.04em;
+}
 .prediction-explain { font-size: 11px; color: var(--text-secondary); line-height: 1.55; }
 
 /* ============================================================
