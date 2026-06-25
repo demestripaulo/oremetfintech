@@ -238,6 +238,30 @@ function checkAlerts(indicators) {
   }
 }
 
+// ---------- Countdown prediction refreshes ----------
+// Fires loadPredictions at T-15m, T-10m, T-5m, T-3m, T-1m before each
+// 15-minute Kalshi window boundary (:00, :15, :30, :45 of each hour).
+const PRED_COUNTDOWN_MARKS = [15 * 60, 10 * 60, 5 * 60, 3 * 60, 60]; // seconds before boundary
+
+function scheduleCountdownRefreshes() {
+  const nowSec = Date.now() / 1000;
+  const nextBoundary = Math.ceil(nowSec / 900) * 900;
+  const secsToNext = nextBoundary - nowSec;
+
+  for (const mark of PRED_COUNTDOWN_MARKS) {
+    const delay = secsToNext - mark;
+    if (delay > 0) {
+      setTimeout(() => { loadPredictions(); }, delay * 1000);
+    }
+  }
+
+  // At the boundary itself, refresh once more and reschedule for the next window.
+  setTimeout(() => {
+    loadPredictions();
+    scheduleCountdownRefreshes();
+  }, secsToNext * 1000);
+}
+
 // ---------- WebSocket ----------
 function connectWS() {
   ws = new WebSocket(WS_URL);
@@ -318,6 +342,6 @@ document.addEventListener('DOMContentLoaded', () => {
   setInterval(fetchTickers, 5000);
   setInterval(() => { if (activeTimeframe !== '1m') loadCandles(); }, 15000);
   setInterval(loadAnalysis, 15000);
-  setInterval(loadPredictions, 60000);
   setInterval(loadHistory, 60000);
+  scheduleCountdownRefreshes();
 });
