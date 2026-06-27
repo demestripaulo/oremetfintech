@@ -96,6 +96,13 @@ function drainAlertQueue() {
 // ---------- Ticker bar ----------
 window.activeSymbol = activeSymbol;
 
+let tickerRafPending = false;
+function scheduleTickerRender() {
+  if (tickerRafPending) return;
+  tickerRafPending = true;
+  requestAnimationFrame(() => { tickerRafPending = false; renderTickerBar(); });
+}
+
 function renderTickerBar() {
   const bar = $('ticker-bar');
   bar.innerHTML = SYMBOLS.map((sym) => {
@@ -306,26 +313,34 @@ function connectBinanceWS() {
     console.log('[MarketDesk] Binance direct WS connected');
   });
 
+  let lastChartUpdate = 0;
   binanceWs.addEventListener('message', (event) => {
     let msg;
     try { msg = JSON.parse(event.data); } catch { return; }
     const k = msg.data?.k;
     if (!k) return;
     const sym = k.s;
-    const candle = {
-      time: Math.floor(k.t / 1000),
-      open: parseFloat(k.o),
-      high: parseFloat(k.h),
-      low: parseFloat(k.l),
-      close: parseFloat(k.c),
-      volume: parseFloat(k.v),
-    };
+    // Update state for all symbols, batch-render ticker at most once per frame
     if (SYMBOLS.includes(sym)) {
-      if (!tickerState[sym]) tickerState[sym] = { price: candle.close, changePercent: 0 };
-      tickerState[sym].price = candle.close;
-      renderTickerBar();
+      if (!tickerState[sym]) tickerState[sym] = { price: 0, changePercent: 0 };
+      tickerState[sym].price = parseFloat(k.c);
+      scheduleTickerRender();
     }
-    if (sym === activeSymbol) chart?.updateLastCandle(candle);
+    // Update chart at most once per second for the active symbol
+    if (sym === activeSymbol) {
+      const now = Date.now();
+      if (now - lastChartUpdate >= 1000) {
+        lastChartUpdate = now;
+        chart?.updateLastCandle({
+          time: Math.floor(k.t / 1000),
+          open: parseFloat(k.o),
+          high: parseFloat(k.h),
+          low: parseFloat(k.l),
+          close: parseFloat(k.c),
+          volume: parseFloat(k.v),
+        });
+      }
+    }
   });
 
   binanceWs.addEventListener('close', () => {
@@ -366,7 +381,7 @@ function connectRelayWS() {
     if (SYMBOLS.includes(sym)) {
       if (!tickerState[sym]) tickerState[sym] = { price: tick.candle.close, changePercent: 0 };
       tickerState[sym].price = tick.candle.close;
-      renderTickerBar();
+      scheduleTickerRender();
     }
     if (sym === activeSymbol) chart?.updateLastCandle(tick.candle);
   });
