@@ -12,16 +12,6 @@ let tickerState = {};
 let ws;
 let wsReconnectAttempts = 0;
 
-// Binance direct WebSocket
-const BINANCE_WS_URL = 'wss://stream.binance.com:9443/stream?streams=' +
-  ['btcusdt', 'ethusdt', 'solusdt', 'bnbusdt', 'xrpusdt'].map(s => `${s}@kline_1m`).join('/');
-let binanceWs = null;
-let binanceReconnectAttempts = 0;
-let binanceWsActive = false;
-
-// Binance REST interval map
-const BINANCE_INTERVAL = { '1m': '1m', '5m': '5m', '15m': '15m', '1h': '1h', '4h': '4h', '1D': '1d' };
-
 function $(id) { return document.getElementById(id); }
 
 function setPanelMessage(id, message, tone = 'muted') {
@@ -96,13 +86,6 @@ function drainAlertQueue() {
 // ---------- Ticker bar ----------
 window.activeSymbol = activeSymbol;
 
-let tickerRafPending = false;
-function scheduleTickerRender() {
-  if (tickerRafPending) return;
-  tickerRafPending = true;
-  requestAnimationFrame(() => { tickerRafPending = false; renderTickerBar(); });
-}
-
 function renderTickerBar() {
   const bar = $('ticker-bar');
   bar.innerHTML = SYMBOLS.map((sym) => {
@@ -145,47 +128,22 @@ async function fetchTickers() {
   }
 }
 
-// ---------- Binance direct REST ----------
-async function fetchBinanceCandles(symbol, interval, limit = 200) {
-  const bi = BINANCE_INTERVAL[interval] || '1m';
-  const res = await fetch(`https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${bi}&limit=${limit}`);
-  if (!res.ok) throw new Error(`Binance HTTP ${res.status}`);
-  const raw = await res.json();
-  return raw.map(c => ({
-    time: Math.floor(c[0] / 1000),
-    open: parseFloat(c[1]),
-    high: parseFloat(c[2]),
-    low: parseFloat(c[3]),
-    close: parseFloat(c[4]),
-    volume: parseFloat(c[5]),
-  }));
-}
-
 // ---------- REST loaders ----------
 async function loadCandles({ fit } = {}) {
   if (!chart) return [];
   setChartMessage(`${t('loadingCandles')} ${activeSymbol}...`);
   try {
-    let candles, source;
-    try {
-      candles = await fetchBinanceCandles(activeSymbol, activeTimeframe);
-      source = 'Binance';
-    } catch (binanceErr) {
-      console.warn('Binance REST failed, falling back to relay:', binanceErr.message);
-      const res = await fetch(`${API_BASE}/api/candles?symbol=${activeSymbol}&interval=${activeTimeframe}&limit=200`);
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-      candles = data.candles;
-      source = data.source;
-    }
-    if (!Array.isArray(candles) || candles.length === 0) throw new Error('empty candles');
+    const res = await fetch(`${API_BASE}/api/candles?symbol=${activeSymbol}&interval=${activeTimeframe}&limit=200`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    if (!Array.isArray(data.candles) || data.candles.length === 0) throw new Error('empty candles');
     const shouldFit = fit ?? !chartFitted;
-    chart.setCandles(candles, { fit: shouldFit });
+    chart.setCandles(data.candles, { fit: shouldFit });
     chartFitted = true;
     clearChartMessage();
     const srcEl = $('chart-source');
-    if (srcEl) srcEl.textContent = source ? `via ${source}` : '';
-    return candles;
+    if (srcEl) srcEl.textContent = data.source ? `via ${data.source}` : '';
+    return data.candles;
   } catch (err) {
     console.error('Failed to load candles', err);
     setChartMessage(`${t('candlesUnavailable')}: ${err.message}`, 'error');
@@ -279,9 +237,7 @@ function checkAlerts(indicators) {
 }
 
 // ---------- Countdown prediction refreshes ----------
-// Fires loadPredictions at T-15m, T-10m, T-5m, T-3m, T-1m before each
-// 15-minute Kalshi window boundary (:00, :15, :30, :45 of each hour).
-const PRED_COUNTDOWN_MARKS = [15 * 60, 10 * 60, 5 * 60, 4 * 60, 3 * 60, 2 * 60, 60]; // seconds before boundary
+const PRED_COUNTDOWN_MARKS = [15 * 60, 10 * 60, 5 * 60, 4 * 60, 3 * 60, 2 * 60, 60];
 
 function scheduleCountdownRefreshes() {
   const nowSec = Date.now() / 1000;
@@ -290,90 +246,25 @@ function scheduleCountdownRefreshes() {
 
   for (const mark of PRED_COUNTDOWN_MARKS) {
     const delay = secsToNext - mark;
-    if (delay > 0) {
-      setTimeout(() => { loadPredictions(); }, delay * 1000);
-    }
+    if (delay > 0) setTimeout(() => { loadPredictions(); }, delay * 1000);
   }
 
-  // At the boundary itself, refresh once more and reschedule for the next window.
   setTimeout(() => {
     loadPredictions();
     scheduleCountdownRefreshes();
   }, secsToNext * 1000);
 }
 
-// ---------- Binance direct WebSocket (primary) ----------
-function connectBinanceWS() {
-  try { binanceWs = new WebSocket(BINANCE_WS_URL); }
-  catch { connectRelayWS(); return; }
-
-  binanceWs.addEventListener('open', () => {
-    binanceReconnectAttempts = 0;
-    binanceWsActive = true;
-    console.log('[MarketDesk] Binance direct WS connected');
-  });
-
-  let lastChartUpdate = 0;
-  binanceWs.addEventListener('message', (event) => {
-    let msg;
-    try { msg = JSON.parse(event.data); } catch { return; }
-    const k = msg.data?.k;
-    if (!k) return;
-    const sym = k.s;
-    // Update state for all symbols, batch-render ticker at most once per frame
-    if (SYMBOLS.includes(sym)) {
-      if (!tickerState[sym]) tickerState[sym] = { price: 0, changePercent: 0 };
-      tickerState[sym].price = parseFloat(k.c);
-      scheduleTickerRender();
-    }
-    // Update chart at most once per second for the active symbol
-    if (sym === activeSymbol) {
-      const now = Date.now();
-      if (now - lastChartUpdate >= 1000) {
-        lastChartUpdate = now;
-        chart?.updateLastCandle({
-          time: Math.floor(k.t / 1000),
-          open: parseFloat(k.o),
-          high: parseFloat(k.h),
-          low: parseFloat(k.l),
-          close: parseFloat(k.c),
-          volume: parseFloat(k.v),
-        });
-      }
-    }
-  });
-
-  binanceWs.addEventListener('close', () => {
-    binanceWsActive = false;
-    scheduleBinanceReconnect();
-  });
-
-  binanceWs.addEventListener('error', () => {
-    binanceWsActive = false;
-    // First failure: fall back to DO relay immediately
-    if (binanceReconnectAttempts === 0 && (!ws || ws.readyState > 1)) connectRelayWS();
-    scheduleBinanceReconnect();
-  });
-}
-
-function scheduleBinanceReconnect() {
-  binanceReconnectAttempts += 1;
-  const delay = Math.min(30000, 1000 * 2 ** binanceReconnectAttempts);
-  console.warn(`[MarketDesk] Binance WS retry in ${delay}ms`);
-  setTimeout(connectBinanceWS, delay);
-}
-
-// ---------- DO relay WebSocket (fallback) ----------
-function connectRelayWS() {
+// ---------- WebSocket ----------
+function connectWS() {
   ws = new WebSocket(WS_URL);
 
   ws.addEventListener('open', () => {
     wsReconnectAttempts = 0;
-    console.log('[MarketDesk] Relay WS connected');
+    console.log('[MarketDesk] WS connected');
   });
 
   ws.addEventListener('message', (event) => {
-    if (binanceWsActive) return; // Binance is primary; relay is silent backup
     let tick;
     try { tick = JSON.parse(event.data); } catch { return; }
     if (tick.type !== 'kline') return;
@@ -381,20 +272,21 @@ function connectRelayWS() {
     if (SYMBOLS.includes(sym)) {
       if (!tickerState[sym]) tickerState[sym] = { price: tick.candle.close, changePercent: 0 };
       tickerState[sym].price = tick.candle.close;
-      scheduleTickerRender();
+      renderTickerBar();
     }
-    if (sym === activeSymbol) chart?.updateLastCandle(tick.candle);
+    if (sym !== activeSymbol) return;
+    chart?.updateLastCandle(tick.candle);
   });
 
-  ws.addEventListener('close', scheduleRelayReconnect);
-  ws.addEventListener('error', scheduleRelayReconnect);
+  ws.addEventListener('close', scheduleWsReconnect);
+  ws.addEventListener('error', scheduleWsReconnect);
 }
 
-function scheduleRelayReconnect() {
+function scheduleWsReconnect() {
   wsReconnectAttempts += 1;
   const delay = Math.min(30000, 1000 * 2 ** wsReconnectAttempts);
-  console.warn(`[MarketDesk] Relay WS retry in ${delay}ms`);
-  setTimeout(connectRelayWS, delay);
+  console.warn(`[MarketDesk] WS disconnected, retry in ${delay}ms`);
+  setTimeout(connectWS, delay);
 }
 
 // ---------- Init ----------
@@ -438,7 +330,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   fetchTickers();
   loadAll();
-  connectBinanceWS(); // falls back to DO relay on error
+  connectWS();
 
   setInterval(fetchTickers, 5000);
   setInterval(() => { if (activeTimeframe !== '1m') loadCandles(); }, 15000);
