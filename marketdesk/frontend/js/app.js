@@ -12,6 +12,16 @@ let tickerState = {};
 let ws;
 let wsReconnectAttempts = 0;
 
+// Binance direct WebSocket
+const BINANCE_WS_URL = 'wss://stream.binance.com:9443/stream?streams=' +
+  ['btcusdt', 'ethusdt', 'solusdt', 'bnbusdt', 'xrpusdt'].map(s => `${s}@kline_1m`).join('/');
+let binanceWs = null;
+let binanceReconnectAttempts = 0;
+let binanceWsActive = false;
+
+// Binance REST interval map
+const BINANCE_INTERVAL = { '1m': '1m', '5m': '5m', '15m': '15m', '1h': '1h', '4h': '4h', '1D': '1d' };
+
 function $(id) { return document.getElementById(id); }
 
 function setPanelMessage(id, message, tone = 'muted') {
@@ -128,24 +138,47 @@ async function fetchTickers() {
   }
 }
 
+// ---------- Binance direct REST ----------
+async function fetchBinanceCandles(symbol, interval, limit = 200) {
+  const bi = BINANCE_INTERVAL[interval] || '1m';
+  const res = await fetch(`https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${bi}&limit=${limit}`);
+  if (!res.ok) throw new Error(`Binance HTTP ${res.status}`);
+  const raw = await res.json();
+  return raw.map(c => ({
+    time: Math.floor(c[0] / 1000),
+    open: parseFloat(c[1]),
+    high: parseFloat(c[2]),
+    low: parseFloat(c[3]),
+    close: parseFloat(c[4]),
+    volume: parseFloat(c[5]),
+  }));
+}
+
 // ---------- REST loaders ----------
 async function loadCandles({ fit } = {}) {
   if (!chart) return [];
   setChartMessage(`${t('loadingCandles')} ${activeSymbol}...`);
   try {
-    const res = await fetch(`${API_BASE}/api/candles?symbol=${activeSymbol}&interval=${activeTimeframe}&limit=200`);
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-    if (!Array.isArray(data.candles) || data.candles.length === 0) {
-      throw new Error('API returned empty candles');
+    let candles, source;
+    try {
+      candles = await fetchBinanceCandles(activeSymbol, activeTimeframe);
+      source = 'Binance';
+    } catch (binanceErr) {
+      console.warn('Binance REST failed, falling back to relay:', binanceErr.message);
+      const res = await fetch(`${API_BASE}/api/candles?symbol=${activeSymbol}&interval=${activeTimeframe}&limit=200`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      candles = data.candles;
+      source = data.source;
     }
+    if (!Array.isArray(candles) || candles.length === 0) throw new Error('empty candles');
     const shouldFit = fit ?? !chartFitted;
-    chart.setCandles(data.candles, { fit: shouldFit });
+    chart.setCandles(candles, { fit: shouldFit });
     chartFitted = true;
     clearChartMessage();
     const srcEl = $('chart-source');
-    if (srcEl) srcEl.textContent = data.source ? `via ${data.source}` : '';
-    return data.candles;
+    if (srcEl) srcEl.textContent = source ? `via ${source}` : '';
+    return candles;
   } catch (err) {
     console.error('Failed to load candles', err);
     setChartMessage(`${t('candlesUnavailable')}: ${err.message}`, 'error');
@@ -262,16 +295,70 @@ function scheduleCountdownRefreshes() {
   }, secsToNext * 1000);
 }
 
-// ---------- WebSocket ----------
-function connectWS() {
+// ---------- Binance direct WebSocket (primary) ----------
+function connectBinanceWS() {
+  try { binanceWs = new WebSocket(BINANCE_WS_URL); }
+  catch { connectRelayWS(); return; }
+
+  binanceWs.addEventListener('open', () => {
+    binanceReconnectAttempts = 0;
+    binanceWsActive = true;
+    console.log('[MarketDesk] Binance direct WS connected');
+  });
+
+  binanceWs.addEventListener('message', (event) => {
+    let msg;
+    try { msg = JSON.parse(event.data); } catch { return; }
+    const k = msg.data?.k;
+    if (!k) return;
+    const sym = k.s;
+    const candle = {
+      time: Math.floor(k.t / 1000),
+      open: parseFloat(k.o),
+      high: parseFloat(k.h),
+      low: parseFloat(k.l),
+      close: parseFloat(k.c),
+      volume: parseFloat(k.v),
+    };
+    if (SYMBOLS.includes(sym)) {
+      if (!tickerState[sym]) tickerState[sym] = { price: candle.close, changePercent: 0 };
+      tickerState[sym].price = candle.close;
+      renderTickerBar();
+    }
+    if (sym === activeSymbol) chart?.updateLastCandle(candle);
+  });
+
+  binanceWs.addEventListener('close', () => {
+    binanceWsActive = false;
+    scheduleBinanceReconnect();
+  });
+
+  binanceWs.addEventListener('error', () => {
+    binanceWsActive = false;
+    // First failure: fall back to DO relay immediately
+    if (binanceReconnectAttempts === 0 && (!ws || ws.readyState > 1)) connectRelayWS();
+    scheduleBinanceReconnect();
+  });
+}
+
+function scheduleBinanceReconnect() {
+  binanceReconnectAttempts += 1;
+  const delay = Math.min(30000, 1000 * 2 ** binanceReconnectAttempts);
+  console.warn(`[MarketDesk] Binance WS retry in ${delay}ms`);
+  setTimeout(connectBinanceWS, delay);
+}
+
+// ---------- DO relay WebSocket (fallback) ----------
+function connectRelayWS() {
   ws = new WebSocket(WS_URL);
 
   ws.addEventListener('open', () => {
     wsReconnectAttempts = 0;
-    console.log('[MarketDesk] WS connected');
+    console.log('[MarketDesk] Relay WS connected');
   });
 
   ws.addEventListener('message', (event) => {
+    if (binanceWsActive) return; // Binance is primary; relay is silent backup
     let tick;
     try { tick = JSON.parse(event.data); } catch { return; }
     if (tick.type !== 'kline') return;
@@ -281,19 +368,18 @@ function connectWS() {
       tickerState[sym].price = tick.candle.close;
       renderTickerBar();
     }
-    if (sym !== activeSymbol) return;
-    chart?.updateLastCandle(tick.candle);
+    if (sym === activeSymbol) chart?.updateLastCandle(tick.candle);
   });
 
-  ws.addEventListener('close', scheduleWsReconnect);
-  ws.addEventListener('error', scheduleWsReconnect);
+  ws.addEventListener('close', scheduleRelayReconnect);
+  ws.addEventListener('error', scheduleRelayReconnect);
 }
 
-function scheduleWsReconnect() {
+function scheduleRelayReconnect() {
   wsReconnectAttempts += 1;
   const delay = Math.min(30000, 1000 * 2 ** wsReconnectAttempts);
-  console.warn(`[MarketDesk] WS disconnected, retry in ${delay}ms`);
-  setTimeout(connectWS, delay);
+  console.warn(`[MarketDesk] Relay WS retry in ${delay}ms`);
+  setTimeout(connectRelayWS, delay);
 }
 
 // ---------- Init ----------
@@ -337,7 +423,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   fetchTickers();
   loadAll();
-  connectWS();
+  connectBinanceWS(); // falls back to DO relay on error
 
   setInterval(fetchTickers, 5000);
   setInterval(() => { if (activeTimeframe !== '1m') loadCandles(); }, 15000);
