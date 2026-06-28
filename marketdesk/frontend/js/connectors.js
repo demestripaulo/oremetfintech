@@ -62,6 +62,33 @@ async function loadNewsFeed() {
 // Kalshi 15-min targets — only BTC/ETH have these short-horizon markets.
 const KALSHI_ASSET = { BTCUSDT: 'BTC', ETHUSDT: 'ETH' };
 
+const fmtUsd = (n) => '$' + Number(n).toLocaleString(undefined, { maximumFractionDigits: 2 });
+
+// Human label for a Kalshi target based on its strike type.
+function kalshiTargetLabel(tgt) {
+  const { strikeType, floorStrike, capStrike } = tgt;
+  if (strikeType === 'between' && floorStrike != null && capStrike != null) {
+    return `${fmtUsd(floorStrike)} – ${fmtUsd(capStrike)}`;
+  }
+  if (strikeType && strikeType.startsWith('less') && (capStrike ?? floorStrike) != null) {
+    return `≤ ${fmtUsd(capStrike ?? floorStrike)}`;
+  }
+  if (strikeType && strikeType.startsWith('greater') && floorStrike != null) {
+    return `≥ ${fmtUsd(floorStrike)}`;
+  }
+  return tgt.title || '—';
+}
+
+// Is spot currently on the YES side of this target?
+function kalshiYesSide(tgt, spot) {
+  if (spot == null) return null;
+  const { strikeType, floorStrike, capStrike } = tgt;
+  if (strikeType === 'between' && floorStrike != null && capStrike != null) return spot >= floorStrike && spot <= capStrike;
+  if (strikeType && strikeType.startsWith('less')) return spot <= (capStrike ?? floorStrike);
+  if (strikeType && strikeType.startsWith('greater')) return spot >= floorStrike;
+  return null;
+}
+
 async function loadKalshiTargets() {
   const container = document.getElementById('kalshi-container');
   if (!container) return;
@@ -83,19 +110,19 @@ async function loadKalshiTargets() {
       ? new Date(data.closeTime).toLocaleTimeString(window.LANG === 'pt' ? 'pt-BR' : 'en-US', { hour: '2-digit', minute: '2-digit' })
       : '';
     const dur = data.windowMinutes ? `${data.windowMinutes}min · ` : '';
+    const spotLabel = spot != null ? `<span class="indicator-explain"> · ${t('currentPrice')}: <span class="mono">${fmtUsd(spot)}</span></span>` : '';
     const rows = data.targets.map((tgt) => {
       const prob = tgt.impliedProb != null ? `${(tgt.impliedProb * 100).toFixed(0)}%` : '—';
       const probClass = tgt.impliedProb != null && tgt.impliedProb >= 0.5 ? 'kalshi-hi' : 'kalshi-lo';
-      // Highlight the strike band that currently contains spot.
-      const atMoney = spot != null && tgt.floorStrike != null && tgt.capStrike != null
-        && spot >= tgt.floorStrike && spot <= tgt.capStrike;
-      return `<tr class="${atMoney ? 'kalshi-atm' : ''}">
-        <td class="mono">${tgt.title}</td>
+      const yes = kalshiYesSide(tgt, spot);
+      const label = kalshiTargetLabel(tgt);
+      return `<tr class="${yes ? 'kalshi-atm' : ''}">
+        <td class="mono">${label}</td>
         <td class="mono ${probClass}">${prob}</td>
       </tr>`;
     }).join('');
     container.innerHTML = `
-      <div class="kalshi-head indicator-explain">${t('kalshiWindow')} ${closeLabel} · ${dur}${data.totalInWindow ?? data.count} ${t('kalshiMarkets')}</div>
+      <div class="kalshi-head indicator-explain">${t('kalshiWindow')} ${closeLabel} · ${dur}${data.totalInWindow ?? data.count} ${t('kalshiMarkets')}${spotLabel}</div>
       <table class="history-table">
         <thead><tr><th>${t('kalshiStrike')}</th><th>${t('kalshiProb')}</th></tr></thead>
         <tbody>${rows}</tbody>

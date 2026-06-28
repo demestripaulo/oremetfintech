@@ -192,6 +192,10 @@ export async function getKalshiTargets(asset = 'BTC', refPrice = null) {
         targets = window.slice(0, 13);
       }
 
+      // The list endpoint often omits live book prices; enrich the few selected
+      // targets with their per-market quote so implied prob populates.
+      targets = await enrichKalshiPrices(targets);
+
       return {
         asset: key,
         series,
@@ -207,6 +211,27 @@ export async function getKalshiTargets(asset = 'BTC', refPrice = null) {
       return { error: err.message };
     }
   });
+}
+
+// For targets missing an implied probability, fetch their single-market quote.
+// Bounded to 8 parallel lookups to stay cheap (15-min windows have ~1 market).
+async function enrichKalshiPrices(targets) {
+  const need = targets.filter((t) => t.impliedProb == null && t.ticker).slice(0, 8);
+  if (need.length === 0) return targets;
+  await Promise.allSettled(need.map(async (t) => {
+    try {
+      const res = await fetch(`${KALSHI_API}/markets/${t.ticker}`, { headers: { 'Accept': 'application/json' } });
+      if (!res.ok) return;
+      const m = (await res.json())?.market;
+      if (!m) return;
+      const yesBid = typeof m.yes_bid === 'number' ? m.yes_bid : null;
+      const yesAsk = typeof m.yes_ask === 'number' ? m.yes_ask : null;
+      if (yesBid != null && yesAsk != null && (yesBid > 0 || yesAsk > 0)) t.impliedProb = (yesBid + yesAsk) / 2 / 100;
+      else if (typeof m.last_price === 'number' && m.last_price > 0) t.impliedProb = m.last_price / 100;
+      if (t.volume == null && typeof m.volume === 'number') t.volume = m.volume;
+    } catch { /* leave as-is */ }
+  }));
+  return targets;
 }
 
 export async function getExternalIntelligence(env) {
