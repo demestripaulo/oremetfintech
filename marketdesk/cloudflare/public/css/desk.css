@@ -570,6 +570,34 @@ table.history-table th, table.history-table td {
 }
 .hit  { color: var(--bull); }
 .miss { color: var(--bear); }
+.hist-pending { color: var(--muted); font-style: italic; }
+
+/* Accuracy scoreboard (before/after hit-rate per horizon) */
+.acc-summary {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+  font-size: 11px;
+}
+.acc-label {
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+.acc-chip {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  padding: 2px 7px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--cyan-dim);
+  color: var(--text);
+}
+.acc-chip b { color: var(--cyan); font-weight: 600; }
+.acc-frac { color: var(--muted); font-size: 10px; }
 
 /* ============================================================
    Footer

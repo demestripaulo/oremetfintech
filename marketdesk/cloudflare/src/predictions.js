@@ -46,7 +46,7 @@ export function predictRange(candles, interval, lang = 'en') {
   const pivots = calculatePivotPoints(candles);
   const levels = [pivots.s2, pivots.s1, pivots.pivot, pivots.r1, pivots.r2];
   for (const level of levels) {
-    if (level > rangeLow && level < currentPrice && level > rangeLow) {
+    if (level > rangeLow && level < currentPrice) {
       rangeLow = Math.max(rangeLow, level);
     }
     if (level < rangeHigh && level > currentPrice) {

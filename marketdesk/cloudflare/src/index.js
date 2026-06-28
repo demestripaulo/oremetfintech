@@ -74,9 +74,15 @@ async function handleRequest(request, env) {
     const fifteenMin = predictRange(candles, '15min', lang);
     const oneHour = predictRange(candles, '1h', lang);
     const daily = predictRange(candles, 'daily', lang);
-    const record = { symbol, generatedAt: Date.now(), fifteenMin, oneHour, daily };
-    await persistPredictionLog(env, record);
-    return json(record);
+    const currentPrice = candles[candles.length - 1].close;
+    // Seed the accuracy tracker (deduped by window) and resolve closed windows,
+    // so the before/after log fills even between cron ticks from live traffic.
+    await resolvePredictions(env, symbol, candles);
+    await recordPredictions(env, symbol, {
+      '15min': { ...fifteenMin, priceAtGeneration: currentPrice },
+      '1h': { ...oneHour, priceAtGeneration: currentPrice },
+    });
+    return json({ symbol, generatedAt: Date.now(), fifteenMin, oneHour, daily });
   }
 
   if (url.pathname === '/api/history') {
@@ -124,22 +130,15 @@ export default {
     for (const symbol of SYMBOLS) {
       try {
         const { candles } = await fetchKlines(symbol, '1m', 200);
-        const indicators = buildIndicatorPanel(candles);
         const fifteenMin = predictRange(candles, '15min');
         const oneHour = predictRange(candles, '1h');
-        const daily = predictRange(candles, 'daily');
         const currentPrice = candles[candles.length - 1].close;
 
-        // Resolve past entries whose 15-min window has closed.
-        await resolvePastPredictions(env, symbol, currentPrice);
-
-        await persistPredictionLog(env, {
-          symbol,
-          generatedAt: Date.now(),
-          fifteenMin,
-          oneHour,
-          daily,
-          priceAtGeneration: currentPrice,
+        // Resolve any window that has closed, then record this window's forecast.
+        await resolvePredictions(env, symbol, candles);
+        await recordPredictions(env, symbol, {
+          '15min': { ...fifteenMin, priceAtGeneration: currentPrice },
+          '1h': { ...oneHour, priceAtGeneration: currentPrice },
         });
       } catch (err) {
         console.error('scheduled analysis failed for', symbol, err);
@@ -148,15 +147,18 @@ export default {
   },
 };
 
-const MAX_LOG_ENTRIES = 24;
+// Holds ~1.5 days of flat per-horizon records (15min + 1h ≈ 5/hour/symbol).
+const MAX_LOG_ENTRIES = 200;
 
-async function persistPredictionLog(env, record) {
-  const key = `log:${record.symbol}`;
-  const existingRaw = await env.MARKET_KV.get(key);
-  const existing = existingRaw ? JSON.parse(existingRaw) : [];
-  existing.push(record);
-  while (existing.length > MAX_LOG_ENTRIES) existing.shift();
-  await env.MARKET_KV.put(key, JSON.stringify(existing));
+// Horizon window length in ms. 'daily' is excluded from the accuracy tracker —
+// it needs a 5PM-ET trigger and is a live-forecast-only panel.
+const HORIZON_MS = { '15min': 15 * 60 * 1000, '1h': 60 * 60 * 1000 };
+
+// Align a timestamp down to the start of its horizon window.
+function windowBounds(interval, now) {
+  const span = HORIZON_MS[interval];
+  const start = Math.floor(now / span) * span;
+  return { windowStart: start, windowEnd: start + span };
 }
 
 async function readPredictionLog(env, symbol) {
@@ -164,24 +166,70 @@ async function readPredictionLog(env, symbol) {
   return raw ? JSON.parse(raw) : [];
 }
 
-// For each unresolved entry whose 15-min window has expired, stamp resolved_price
-// and mark whether the actual price fell inside the predicted range.
-async function resolvePastPredictions(env, symbol, currentPrice) {
+// Record the window-START prediction for each tracked horizon. De-duped by
+// (interval, windowStart): the first prediction seen for a window is kept, so
+// the log reflects "what was forecast at the start of the window" — later ticks
+// within the same window do not overwrite it.
+async function recordPredictions(env, symbol, predictions, now = Date.now()) {
   const key = `log:${symbol}`;
-  const raw = await env.MARKET_KV.get(key);
-  if (!raw) return;
-  const log = JSON.parse(raw);
-  const FIFTEEN_MIN_MS = 15 * 60 * 1000;
+  const log = await readPredictionLog(env, symbol);
+  let changed = false;
+
+  for (const [interval, p] of Object.entries(predictions)) {
+    if (!HORIZON_MS[interval] || !p) continue;
+    const { windowStart, windowEnd } = windowBounds(interval, now);
+    const exists = log.some(e => e.interval === interval && e.windowStart === windowStart);
+    if (exists) continue;
+    log.push({
+      symbol,
+      interval,
+      windowStart,
+      windowEnd,
+      generatedAt: now,
+      priceAtGeneration: p.priceAtGeneration ?? null,
+      range_low: p.range_low,
+      range_high: p.range_high,
+      midpoint: p.midpoint,
+      bias: p.bias,
+      confidence: p.confidence,
+      resolved_price: null,
+      hit: null,
+      status: 'pending',
+    });
+    changed = true;
+  }
+
+  while (log.length > MAX_LOG_ENTRIES) log.shift();
+  if (changed) await env.MARKET_KV.put(key, JSON.stringify(log));
+}
+
+// Resolve any pending record whose window has closed, using the ACTUAL price at
+// window end taken from the 1-minute candle series (not the current tick), so a
+// 15min and an hourly prediction are each scored at their own correct boundary.
+async function resolvePredictions(env, symbol, candles) {
+  const key = `log:${symbol}`;
+  const log = await readPredictionLog(env, symbol);
+  if (log.length === 0) return;
+
+  // time(seconds) -> candle, for O(1) window-end price lookup.
+  const byTime = new Map(candles.map(c => [c.time, c]));
+  const priceAt = (tSec) => {
+    const atBoundary = byTime.get(tSec);        // candle opening at the boundary
+    if (atBoundary) return atBoundary.open;     // open == price exactly at window end
+    const lastInWindow = byTime.get(tSec - 60); // else close of the final 1m candle
+    return lastInWindow ? lastInWindow.close : null;
+  };
+
   const now = Date.now();
   let changed = false;
-  for (const entry of log) {
-    if (entry.resolved_price != null) continue;
-    if (now - entry.generatedAt < FIFTEEN_MIN_MS) continue;
-    const low  = entry.fifteenMin?.range_low;
-    const high = entry.fifteenMin?.range_high;
-    if (low == null || high == null) continue;
-    entry.resolved_price = currentPrice;
-    entry.hit = currentPrice >= low && currentPrice <= high;
+  for (const e of log) {
+    if (e.status !== 'pending') continue;
+    if (now < e.windowEnd) continue;
+    const actual = priceAt(Math.floor(e.windowEnd / 1000));
+    if (actual == null) continue; // candle not in range yet; resolve on a later tick
+    e.resolved_price = actual;
+    e.hit = actual >= e.range_low && actual <= e.range_high;
+    e.status = 'resolved';
     changed = true;
   }
   if (changed) await env.MARKET_KV.put(key, JSON.stringify(log));

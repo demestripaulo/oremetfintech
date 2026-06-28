@@ -33,8 +33,9 @@ const I18N = {
     midpoint: 'Midpoint', confidence: 'Confidence',
     generatingPredictions: 'Generating educational forecasts...',
     // History
-    histTime: 'Time', histInterval: 'Interval',
+    histTime: 'Window', histInterval: 'Interval',
     histRange: 'Projected Range', histResult: 'Result',
+    histActual: 'Actual', histAccuracy: 'Accuracy',
     histPending: 'pending', histHit: 'correct', histMiss: 'missed',
     noHistory: 'No analysis history yet.',
     // Connectors
@@ -119,8 +120,9 @@ const I18N = {
     midpoint: 'Ponto médio', confidence: 'Confiança',
     generatingPredictions: 'Gerando previsões educacionais...',
     // History
-    histTime: 'Horário', histInterval: 'Intervalo',
+    histTime: 'Janela', histInterval: 'Intervalo',
     histRange: 'Range previsto', histResult: 'Resultado',
+    histActual: 'Real', histAccuracy: 'Acerto',
     histPending: 'pendente', histHit: 'acertou', histMiss: 'errou',
     noHistory: 'Sem histórico de análises ainda.',
     // Connectors

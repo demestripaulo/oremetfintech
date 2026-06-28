@@ -73,39 +73,74 @@ function renderPredictions(data) {
   container.innerHTML = cards.join('');
 }
 
+const INTERVAL_LABEL = { '15min': '15m', '1h': '1h', daily: '1D' };
+
+function fmtWindow(ms) {
+  const TZ_OFFSET_MS = -4 * 3600 * 1000; // EDT (UTC-4)
+  const d = new Date(ms + TZ_OFFSET_MS);
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}`;
+}
+
+// Per-interval hit rate over resolved entries — the "before/after" scoreboard.
+function accuracySummary(log) {
+  const stats = {};
+  for (const e of log) {
+    if (e.status !== 'resolved') continue;
+    const s = stats[e.interval] || (stats[e.interval] = { hit: 0, total: 0 });
+    s.total += 1;
+    if (e.hit) s.hit += 1;
+  }
+  const parts = Object.entries(stats).map(([interval, s]) => {
+    const pct = s.total ? Math.round((s.hit / s.total) * 100) : 0;
+    return `<span class="acc-chip"><b>${INTERVAL_LABEL[interval] || interval}</b> ${pct}% <span class="acc-frac">(${s.hit}/${s.total})</span></span>`;
+  });
+  if (parts.length === 0) return '';
+  return `<div class="acc-summary"><span class="acc-label">${t('histAccuracy')}:</span> ${parts.join('')}</div>`;
+}
+
 function renderHistory(log) {
   const container = document.getElementById('history-container');
   if (!log || log.length === 0) {
     container.innerHTML = `<p class="indicator-explain">${t('noHistory')}</p>`;
     return;
   }
-  const rows = log.slice().reverse().slice(0, 24).map((entry) => {
-    const time = new Date(entry.generated_at || entry.generatedAt).toLocaleTimeString(window.LANG === 'pt' ? 'pt-BR' : 'en-US');
-    const low = entry.range_low ?? entry.fifteenMin?.range_low;
-    const high = entry.range_high ?? entry.fifteenMin?.range_high;
-    const resolvedPrice = entry.resolved_price;
-    let result = `<span class="indicator-explain">${t('histPending')}</span>`;
-    if (resolvedPrice != null) {
-      const hit = resolvedPrice >= low && resolvedPrice <= high;
-      result = hit
-        ? `<span class="hit">${t('histHit')} (${resolvedPrice.toFixed(2)})</span>`
-        : `<span class="miss">${t('histMiss')} (${resolvedPrice.toFixed(2)})</span>`;
+
+  // Newest window first.
+  const sorted = log.slice().sort((a, b) => (b.windowStart ?? b.generatedAt ?? 0) - (a.windowStart ?? a.generatedAt ?? 0));
+
+  const rows = sorted.slice(0, 40).map((e) => {
+    const win = fmtWindow(e.windowStart ?? e.generatedAt ?? Date.now());
+    const interval = INTERVAL_LABEL[e.interval] || e.interval || '15min';
+    const low = e.range_low, high = e.range_high;
+    const range = (low?.toFixed ? low.toFixed(2) : low) + ' — ' + (high?.toFixed ? high.toFixed(2) : high);
+
+    let actual = '<span class="indicator-explain">—</span>';
+    let result = `<span class="hist-pending">${t('histPending')}</span>`;
+    if (e.status === 'resolved' && e.resolved_price != null) {
+      actual = `<span class="mono">${e.resolved_price.toFixed(2)}</span>`;
+      result = e.hit
+        ? `<span class="hit">✓ ${t('histHit')}</span>`
+        : `<span class="miss">✗ ${t('histMiss')}</span>`;
     }
     return `<tr>
-      <td>${time}</td>
-      <td>${entry.interval || '15min'}</td>
-      <td class="mono">${low?.toFixed ? low.toFixed(2) : low} — ${high?.toFixed ? high.toFixed(2) : high}</td>
+      <td class="mono">${win}</td>
+      <td>${interval}</td>
+      <td class="mono">${range}</td>
+      <td>${actual}</td>
       <td>${result}</td>
     </tr>`;
   }).join('');
 
   container.innerHTML = `
+    ${accuracySummary(log)}
     <div class="history-scroll">
       <table class="history-table">
         <thead><tr>
           <th>${t('histTime')}</th>
           <th>${t('histInterval')}</th>
           <th>${t('histRange')}</th>
+          <th>${t('histActual')}</th>
           <th>${t('histResult')}</th>
         </tr></thead>
         <tbody>${rows}</tbody>
