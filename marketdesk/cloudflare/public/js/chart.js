@@ -168,13 +168,16 @@ function emaLine(candles, period, tzOffset = 0) {
   return out;
 }
 
+// O(n) rolling-sum SMA — avoids the O(n·period) slice+reduce per bar.
 function smaLine(candles, period, tzOffset = 0) {
   const out = [];
+  let sum = 0;
   for (let i = 0; i < candles.length; i++) {
-    if (i < period - 1) continue;
-    const slice = candles.slice(i - period + 1, i + 1);
-    const avg = slice.reduce((a, c) => a + c.close, 0) / period;
-    out.push({ time: candles[i].time + tzOffset, value: avg });
+    sum += candles[i].close;
+    if (i >= period) sum -= candles[i - period].close;
+    if (i >= period - 1) {
+      out.push({ time: candles[i].time + tzOffset, value: sum / period });
+    }
   }
   return out;
 }

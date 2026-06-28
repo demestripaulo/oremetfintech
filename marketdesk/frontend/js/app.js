@@ -86,30 +86,63 @@ function drainAlertQueue() {
 // ---------- Ticker bar ----------
 window.activeSymbol = activeSymbol;
 
-function renderTickerBar() {
+// Cache of per-symbol DOM nodes so updates touch only text/classes instead of
+// rebuilding innerHTML (avoids reflow + listener churn on every WS tick).
+const tickerEls = {};
+let tickerBuilt = false;
+let tickerRafPending = false;
+
+function buildTickerBar() {
   const bar = $('ticker-bar');
-  bar.innerHTML = SYMBOLS.map((sym) => {
+  if (!bar) return;
+  bar.innerHTML = '';
+  SYMBOLS.forEach((sym) => {
+    const item = document.createElement('div');
+    item.className = 'ticker-item';
+    item.dataset.symbol = sym;
+    item.innerHTML =
+      `<div class="symbol">${sym.replace('USDT', '/USDT')}</div>` +
+      `<div class="price mono">...</div>` +
+      `<div class="change mono">0.00%</div>`;
+    bar.appendChild(item);
+    tickerEls[sym] = {
+      item,
+      price: item.querySelector('.price'),
+      change: item.querySelector('.change'),
+    };
+  });
+  // Single delegated listener — bound once, never re-added.
+  bar.addEventListener('click', (e) => {
+    const item = e.target.closest('.ticker-item');
+    if (!item) return;
+    activeSymbol = item.dataset.symbol;
+    window.activeSymbol = activeSymbol;
+    chartFitted = false;
+    renderTickerBar();
+    loadAll();
+  });
+  tickerBuilt = true;
+}
+
+// Coalesce repaints to at most one per animation frame.
+function scheduleTickerRender() {
+  if (tickerRafPending) return;
+  tickerRafPending = true;
+  requestAnimationFrame(() => { tickerRafPending = false; renderTickerBar(); });
+}
+
+function renderTickerBar() {
+  if (!tickerBuilt) buildTickerBar();
+  SYMBOLS.forEach((sym) => {
+    const els = tickerEls[sym];
+    if (!els) return;
     const t = tickerState[sym];
     const price = t ? t.price.toFixed(2) : '...';
     const change = t ? t.changePercent : 0;
-    const changeClass = change >= 0 ? 'up' : 'down';
-    return `
-      <div class="ticker-item ${sym === activeSymbol ? 'active' : ''}" data-symbol="${sym}">
-        <div class="symbol">${sym.replace('USDT', '/USDT')}</div>
-        <div class="price mono">$${price}</div>
-        <div class="change ${changeClass} mono">${change >= 0 ? '+' : ''}${change.toFixed(2)}%</div>
-      </div>
-    `;
-  }).join('');
-
-  bar.querySelectorAll('.ticker-item').forEach((el) => {
-    el.addEventListener('click', () => {
-      activeSymbol = el.dataset.symbol;
-      window.activeSymbol = activeSymbol;
-      chartFitted = false;
-      renderTickerBar();
-      loadAll();
-    });
+    els.price.textContent = `$${price}`;
+    els.change.textContent = `${change >= 0 ? '+' : ''}${change.toFixed(2)}%`;
+    els.change.className = `change mono ${change >= 0 ? 'up' : 'down'}`;
+    els.item.classList.toggle('active', sym === activeSymbol);
   });
 }
 
@@ -238,24 +271,31 @@ function checkAlerts(indicators) {
 
 // ---------- Countdown prediction refreshes ----------
 const PRED_COUNTDOWN_MARKS = [15 * 60, 10 * 60, 5 * 60, 4 * 60, 3 * 60, 2 * 60, 60];
+let countdownTimers = [];
 
 function scheduleCountdownRefreshes() {
+  // Clear any timers left from the previous window so they never stack up.
+  countdownTimers.forEach(clearTimeout);
+  countdownTimers = [];
+
   const nowSec = Date.now() / 1000;
   const nextBoundary = Math.ceil(nowSec / 900) * 900;
   const secsToNext = nextBoundary - nowSec;
 
   for (const mark of PRED_COUNTDOWN_MARKS) {
     const delay = secsToNext - mark;
-    if (delay > 0) setTimeout(() => { loadPredictions(); }, delay * 1000);
+    if (delay > 0) countdownTimers.push(setTimeout(() => { loadPredictions(); }, delay * 1000));
   }
 
-  setTimeout(() => {
+  countdownTimers.push(setTimeout(() => {
     loadPredictions();
     scheduleCountdownRefreshes();
-  }, secsToNext * 1000);
+  }, secsToNext * 1000));
 }
 
 // ---------- WebSocket ----------
+let wsReconnectScheduled = false;
+
 function connectWS() {
   ws = new WebSocket(WS_URL);
 
@@ -272,7 +312,7 @@ function connectWS() {
     if (SYMBOLS.includes(sym)) {
       if (!tickerState[sym]) tickerState[sym] = { price: tick.candle.close, changePercent: 0 };
       tickerState[sym].price = tick.candle.close;
-      renderTickerBar();
+      scheduleTickerRender();
     }
     if (sym !== activeSymbol) return;
     chart?.updateLastCandle(tick.candle);
@@ -283,10 +323,13 @@ function connectWS() {
 }
 
 function scheduleWsReconnect() {
+  // close + error can both fire for one dead socket — schedule only once.
+  if (wsReconnectScheduled) return;
+  wsReconnectScheduled = true;
   wsReconnectAttempts += 1;
   const delay = Math.min(30000, 1000 * 2 ** wsReconnectAttempts);
   console.warn(`[MarketDesk] WS disconnected, retry in ${delay}ms`);
-  setTimeout(connectWS, delay);
+  setTimeout(() => { wsReconnectScheduled = false; connectWS(); }, delay);
 }
 
 // ---------- Init ----------

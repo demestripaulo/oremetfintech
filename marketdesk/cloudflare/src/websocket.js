@@ -33,6 +33,11 @@ const KRAKEN_TO_SYMBOL = {
 };
 
 export class MarketHub {
+  // Max one broadcast per symbol per this interval. ~1s keeps the chart pulse
+  // smooth while capping browser repaint work an order of magnitude below the
+  // raw upstream rate.
+  static FLUSH_INTERVAL_MS = 1000;
+
   constructor(state, env) {
     this.state = state;
     this.env = env;
@@ -46,6 +51,27 @@ export class MarketHub {
     this.partialCandles = new Map();
     // Bucket start time (floored to 1-minute boundary) per symbol.
     this.bucketStart = new Map();
+    // Coalesced broadcast: upstream sources push 10-40 msg/s per symbol, far more
+    // than any browser (especially low-end) can repaint. We accumulate the latest
+    // candle state and flush at most once per FLUSH_INTERVAL_MS, sending each
+    // dirty symbol's newest tick exactly once. This is the single biggest lever
+    // for keeping weak clients responsive.
+    this.dirtySymbols = new Set();
+    this.flushTimer = null;
+  }
+
+  // Mark a symbol's tick dirty and ensure a flush is scheduled.
+  scheduleFlush(symbol) {
+    this.dirtySymbols.add(symbol);
+    if (this.flushTimer !== null) return;
+    this.flushTimer = setTimeout(() => {
+      this.flushTimer = null;
+      for (const sym of this.dirtySymbols) {
+        const tick = this.lastTicks.get(sym);
+        if (tick) this.broadcast(tick);
+      }
+      this.dirtySymbols.clear();
+    }, MarketHub.FLUSH_INTERVAL_MS);
   }
 
   async fetch(request) {
@@ -192,7 +218,7 @@ export class MarketHub {
           candle: { ...candle },
         };
         this.lastTicks.set(symbol, tick);
-        this.broadcast(tick);
+        this.scheduleFlush(symbol);
       }
     }
   }
@@ -234,7 +260,7 @@ export class MarketHub {
       candle: { ...candle },
     };
     this.lastTicks.set(symbol, tick);
-    this.broadcast(tick);
+    this.scheduleFlush(symbol);
   }
 
   broadcast(tick) {
