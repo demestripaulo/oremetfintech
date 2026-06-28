@@ -114,14 +114,31 @@ const KALSHI_SERIES = {
   '1h':  { BTC: 'KXBTC',    ETH: 'KXETH' },
 };
 
+// Kalshi market data: prices come as dollar STRINGS in 0..1 (e.g. "0.0280" =
+// 2.8% implied prob) under *_dollars fields — NOT integer-cent yes_bid/yes_ask.
+// Fall back to the legacy integer-cent fields just in case an endpoint differs.
+function kalshiImpliedProb(m) {
+  const num = (v) => { const n = parseFloat(v); return Number.isFinite(n) ? n : null; };
+  const yb = num(m.yes_bid_dollars), ya = num(m.yes_ask_dollars), lp = num(m.last_price_dollars);
+  if (yb != null && ya != null && (yb > 0 || ya > 0)) return (yb + ya) / 2;
+  if (lp != null && lp > 0) return lp;
+  // Legacy integer-cent fallback.
+  const cb = typeof m.yes_bid === 'number' ? m.yes_bid : null;
+  const ca = typeof m.yes_ask === 'number' ? m.yes_ask : null;
+  if (cb != null && ca != null && (cb > 0 || ca > 0)) return (cb + ca) / 2 / 100;
+  if (typeof m.last_price === 'number' && m.last_price > 0) return m.last_price / 100;
+  return null;
+}
+
+function kalshiVolume(m) {
+  const n = parseFloat(m.volume_fp ?? m.volume_24h_fp);
+  if (Number.isFinite(n)) return n;
+  return typeof m.volume === 'number' ? m.volume : null;
+}
+
 // Normalize a raw Kalshi market object into a compact target descriptor.
 function normalizeKalshiMarket(m) {
   if (!m) return null;
-  const yesBid = typeof m.yes_bid === 'number' ? m.yes_bid : null;
-  const yesAsk = typeof m.yes_ask === 'number' ? m.yes_ask : null;
-  let impliedProb = null;
-  if (yesBid != null && yesAsk != null) impliedProb = (yesBid + yesAsk) / 2 / 100;
-  else if (typeof m.last_price === 'number' && m.last_price > 0) impliedProb = m.last_price / 100;
   // Midpoint of a 'between' market, else the single strike — used for centering.
   const floor = typeof m.floor_strike === 'number' ? m.floor_strike : null;
   const cap = typeof m.cap_strike === 'number' ? m.cap_strike : null;
@@ -133,8 +150,8 @@ function normalizeKalshiMarket(m) {
     capStrike: cap,
     strikeMid: mid,
     strikeType: m.strike_type || null,
-    impliedProb,            // 0..1, or null
-    volume: typeof m.volume === 'number' ? m.volume : null,
+    impliedProb: kalshiImpliedProb(m),   // 0..1, or null
+    volume: kalshiVolume(m),
     openTime: m.open_time || null,
     closeTime: m.close_time || m.expiration_time || null,
   };
@@ -227,11 +244,9 @@ async function enrichKalshiPrices(targets) {
       if (!res.ok) return;
       const m = (await res.json())?.market;
       if (!m) return;
-      const yesBid = typeof m.yes_bid === 'number' ? m.yes_bid : null;
-      const yesAsk = typeof m.yes_ask === 'number' ? m.yes_ask : null;
-      if (yesBid != null && yesAsk != null && (yesBid > 0 || yesAsk > 0)) t.impliedProb = (yesBid + yesAsk) / 2 / 100;
-      else if (typeof m.last_price === 'number' && m.last_price > 0) t.impliedProb = m.last_price / 100;
-      if (t.volume == null && typeof m.volume === 'number') t.volume = m.volume;
+      const prob = kalshiImpliedProb(m);
+      if (prob != null) t.impliedProb = prob;
+      if (t.volume == null) t.volume = kalshiVolume(m);
     } catch { /* leave as-is */ }
   }));
   return targets;
