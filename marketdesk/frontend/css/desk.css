@@ -584,6 +584,8 @@ table.history-table th, table.history-table td {
 .kalshi-section .kalshi-head b { color: var(--cyan); }
 .kx-agree { color: var(--bull); font-size: 10px; font-weight: 600; }
 .kx-diverge { color: var(--amber); font-size: 10px; font-weight: 600; }
+.kalshi-calib { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--border); line-height: 1.6; }
+.kalshi-calib b { color: var(--cyan); }
 
 /* Accuracy scoreboard (before/after hit-rate per horizon) */
 .acc-summary {

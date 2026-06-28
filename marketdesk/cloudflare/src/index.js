@@ -1,12 +1,15 @@
 import { fetchKlines, fetch24hTicker, SYMBOLS } from './binance.js';
 import { buildIndicatorPanel } from './analysis.js';
-import { predictRange, crossKalshiTargets } from './predictions.js';
+import { predictRange, crossKalshiTargets, modelProbForTarget } from './predictions.js';
 import {
   getFearGreedIndex,
   getExternalIntelligence,
   getMarketNews,
   getKalshiTargets,
 } from './connectors.js';
+
+// Assets that have Kalshi 15-min directional markets we calibrate against.
+const KALSHI_ASSETS = ['BTC', 'ETH'];
 
 export { MarketHub } from './websocket.js';
 
@@ -132,6 +135,13 @@ async function handleRequest(request, env) {
     return json(result);
   }
 
+  if (url.pathname === '/api/calibration') {
+    const symbol = url.searchParams.get('symbol') || 'BTCUSDT';
+    const raw = await env.MARKET_KV.get(`calib:${symbol}`);
+    const log = raw ? JSON.parse(raw) : [];
+    return json({ symbol, ...calibrationSummary(log) });
+  }
+
   // Anything else (/, /css/*, /js/*, ...) is the static frontend bundle.
   if (env.ASSETS) {
     return env.ASSETS.fetch(request);
@@ -166,12 +176,100 @@ export default {
           '15min': { ...fifteenMin, priceAtGeneration: currentPrice },
           '1h': { ...oneHour, priceAtGeneration: currentPrice },
         });
+
+        // Calibration: for BTC/ETH, record the model-vs-market directional
+        // prediction for the live 15-min window, and resolve closed ones.
+        const asset = symbol.replace('USDT', '');
+        if (KALSHI_ASSETS.includes(asset)) {
+          await resolveCalibration(env, symbol, candles);
+          const kalshi = await getKalshiTargets(asset, currentPrice, '15m');
+          const tgt = kalshi && !kalshi.error && Array.isArray(kalshi.targets) ? kalshi.targets[0] : null;
+          if (tgt && tgt.openTime && tgt.closeTime && (tgt.floorStrike != null || tgt.capStrike != null)) {
+            await recordCalibration(env, symbol, {
+              interval: '15min',
+              windowStart: new Date(tgt.openTime).getTime(),
+              windowEnd: new Date(tgt.closeTime).getTime(),
+              strike: tgt.floorStrike ?? tgt.capStrike,
+              strikeType: tgt.strikeType,
+              capStrike: tgt.capStrike,
+              marketProb: tgt.impliedProb,
+              modelProb: modelProbForTarget(fifteenMin, tgt),
+            });
+          }
+        }
       } catch (err) {
         console.error('scheduled analysis failed for', symbol, err);
       }
     }
   },
 };
+
+// ---------- Calibration tracker (directional, 15-min) ----------
+const MAX_CALIB_ENTRIES = 500;
+
+async function recordCalibration(env, symbol, sample) {
+  const key = `calib:${symbol}`;
+  const raw = await env.MARKET_KV.get(key);
+  const log = raw ? JSON.parse(raw) : [];
+  if (log.some((e) => e.interval === sample.interval && e.windowStart === sample.windowStart)) return;
+  log.push({ ...sample, outcome: null, status: 'pending' });
+  while (log.length > MAX_CALIB_ENTRIES) log.shift();
+  await env.MARKET_KV.put(key, JSON.stringify(log));
+}
+
+async function resolveCalibration(env, symbol, candles) {
+  const key = `calib:${symbol}`;
+  const raw = await env.MARKET_KV.get(key);
+  if (!raw) return;
+  const log = JSON.parse(raw);
+  const byTime = new Map(candles.map((c) => [c.time, c]));
+  const priceAt = (tSec) => byTime.get(tSec)?.open ?? byTime.get(tSec - 60)?.close ?? null;
+  const newest = candles.length ? candles[candles.length - 1].close : null;
+  const now = Date.now();
+  const GRACE = 5 * 60 * 1000;
+  let changed = false;
+  for (const e of log) {
+    if (e.status !== 'pending' || now < e.windowEnd) continue;
+    let actual = priceAt(Math.floor(e.windowEnd / 1000));
+    if (actual == null) { if (now < e.windowEnd + GRACE || newest == null) continue; actual = newest; }
+    // Directional outcome: did settlement satisfy the target?
+    let hit;
+    const type = e.strikeType || 'greater_or_equal';
+    if (type === 'between' && e.strike != null && e.capStrike != null) hit = actual >= e.strike && actual <= e.capStrike;
+    else if (type.startsWith('less')) hit = actual <= (e.capStrike ?? e.strike);
+    else hit = actual >= e.strike;
+    e.outcome = hit ? 1 : 0;
+    e.resolved_price = actual;
+    e.status = 'resolved';
+    changed = true;
+  }
+  if (changed) await env.MARKET_KV.put(key, JSON.stringify(log));
+}
+
+// Brier score (lower = better) + reliability buckets for model vs market.
+function calibrationSummary(log) {
+  const resolved = log.filter((e) => e.status === 'resolved' && typeof e.outcome === 'number');
+  const n = resolved.length;
+  const brier = (probKey) => {
+    const xs = resolved.filter((e) => typeof e[probKey] === 'number');
+    if (xs.length === 0) return null;
+    return xs.reduce((a, e) => a + (e[probKey] - e.outcome) ** 2, 0) / xs.length;
+  };
+  // Hit-rate by predicted-probability bucket (market), for a reliability curve.
+  const buckets = [];
+  for (let b = 0; b < 10; b++) {
+    const lo = b / 10, hi = (b + 1) / 10;
+    const xs = resolved.filter((e) => typeof e.marketProb === 'number' && e.marketProb >= lo && e.marketProb < (hi === 1 ? 1.0001 : hi));
+    if (xs.length) buckets.push({ bucket: `${Math.round(lo * 100)}-${Math.round(hi * 100)}%`, n: xs.length, observed: round01(xs.reduce((a, e) => a + e.outcome, 0) / xs.length) });
+  }
+  const modelBrier = brier('modelProb');
+  const marketBrier = brier('marketProb');
+  // Skill score: how much the model beats the market (>0 = better than market).
+  const skill = modelBrier != null && marketBrier ? round01(1 - modelBrier / marketBrier) : null;
+  return { samples: n, modelBrier: r3(modelBrier), marketBrier: r3(marketBrier), skillVsMarket: skill, buckets };
+}
+function r3(x) { return x == null ? null : Math.round(x * 1000) / 1000; }
+function round01(x) { return Math.round(x * 100) / 100; }
 
 // Holds ~1.5 days of flat per-horizon records (15min + 1h ≈ 5/hour/symbol).
 const MAX_LOG_ENTRIES = 200;

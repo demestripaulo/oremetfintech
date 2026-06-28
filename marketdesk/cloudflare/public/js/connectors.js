@@ -89,6 +89,25 @@ function kalshiYesSide(tgt, spot) {
   return null;
 }
 
+// Reliability readout: Brier scores + model skill vs the market.
+function renderKalshiCalibration(c) {
+  if (!c || c.samples == null) return '';
+  if (c.samples === 0) {
+    return `<div class="kalshi-calib indicator-explain">${t('kxCalibTitle')}: ${t('kxCalibPending')}</div>`;
+  }
+  const fmt = (x) => (x == null ? '—' : x.toFixed(3));
+  const skill = c.skillVsMarket;
+  const skillTxt = skill == null ? '—' : `${skill > 0 ? '+' : ''}${(skill * 100).toFixed(0)}%`;
+  const skillClass = skill != null && skill > 0 ? 'kx-agree' : 'kx-diverge';
+  return `
+    <div class="kalshi-calib indicator-explain">
+      <b>${t('kxCalibTitle')}</b> · n=${c.samples} ·
+      ${t('kxCalibModel')} <span class="mono">${fmt(c.modelBrier)}</span> ·
+      ${t('kxCalibMarket')} <span class="mono">${fmt(c.marketBrier)}</span> ·
+      ${t('kxCalibSkill')} <span class="${skillClass}">${skillTxt}</span>
+    </div>`;
+}
+
 // Compact badge summarizing the model-vs-market crossing for a target.
 function kalshiVerdictBadge(cross) {
   if (!cross || !cross.signal) return '<span class="indicator-explain">—</span>';
@@ -148,11 +167,16 @@ async function loadKalshiTargets() {
   const fetchHz = (hz) => fetch(`${CONNECTORS_API_BASE}/api/connectors/kalshi?asset=${asset}&horizon=${hz}${priceParam}`)
     .then((r) => r.json()).catch((err) => ({ error: err.message }));
   try {
-    const [m15, h1] = await Promise.all([fetchHz('15m'), fetchHz('1h')]);
+    const [m15, h1, calib] = await Promise.all([
+      fetchHz('15m'),
+      fetchHz('1h'),
+      fetch(`${CONNECTORS_API_BASE}/api/calibration?symbol=${window.activeSymbol}`).then((r) => r.json()).catch(() => null),
+    ]);
     const spotLabel = spot != null ? `<div class="indicator-explain kalshi-spot">${t('currentPrice')}: <span class="mono">${fmtUsd(spot)}</span></div>` : '';
     container.innerHTML = spotLabel
       + renderKalshiSection(m15, spot, t('kalshiH15'))
-      + renderKalshiSection(h1, spot, t('kalshiH1'));
+      + renderKalshiSection(h1, spot, t('kalshiH1'))
+      + renderKalshiCalibration(calib);
   } catch (err) {
     container.innerHTML = `<p class="indicator-explain">${t('kalshiUnavailable')}${err.message}</p>`;
   }

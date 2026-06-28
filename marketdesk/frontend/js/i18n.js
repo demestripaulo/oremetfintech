@@ -87,6 +87,8 @@ const I18N = {
     kalshiStrike: 'Target', kalshiProb: 'Implied prob.',
     kalshiMarket: 'Market', kalshiModel: 'Model', kalshiVerdict: 'Cross',
     kxAgree: 'Agree', kxAgreeNo: 'Agree (no)', kxDiverge: 'Diverge', kxModelOnly: 'model',
+    kxCalibTitle: 'Calibration (15-min)', kxCalibPending: 'collecting data — needs resolved windows',
+    kxCalibModel: 'Model Brier', kxCalibMarket: 'Market Brier', kxCalibSkill: 'Model skill',
     kalshiH15: '15-min', kalshiH1: 'Hourly',
     // Trade Filter
     tradeFilterTitle: 'Kalshi Trade Filter',
@@ -183,6 +185,8 @@ const I18N = {
     kalshiStrike: 'Target', kalshiProb: 'Prob. implícita',
     kalshiMarket: 'Mercado', kalshiModel: 'Modelo', kalshiVerdict: 'Cruzam.',
     kxAgree: 'Concorda', kxAgreeNo: 'Concorda (não)', kxDiverge: 'Diverge', kxModelOnly: 'modelo',
+    kxCalibTitle: 'Calibração (15min)', kxCalibPending: 'coletando dados — precisa de janelas resolvidas',
+    kxCalibModel: 'Brier Modelo', kxCalibMarket: 'Brier Mercado', kxCalibSkill: 'Skill do modelo',
     kalshiH15: '15min', kalshiH1: 'Horário',
     // Trade Filter
     tradeFilterTitle: 'Kalshi Trade Filter',
