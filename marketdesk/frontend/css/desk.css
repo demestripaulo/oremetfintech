@@ -578,6 +578,10 @@ table.history-table th, table.history-table td {
 .kalshi-lo { color: var(--bear); }
 .kalshi-atm { background: var(--cyan-dim); }
 .kalshi-atm td { font-weight: 600; }
+.kalshi-spot { margin-bottom: 8px; }
+.kalshi-section { margin-bottom: 12px; }
+.kalshi-section:last-child { margin-bottom: 0; }
+.kalshi-section .kalshi-head b { color: var(--cyan); }
 
 /* Accuracy scoreboard (before/after hit-rate per horizon) */
 .acc-summary {

@@ -85,6 +85,7 @@ const I18N = {
     kalshiWindow: 'Window closes',
     kalshiMarkets: 'markets',
     kalshiStrike: 'Target', kalshiProb: 'Implied prob.',
+    kalshiH15: '15-min', kalshiH1: 'Hourly',
     // Trade Filter
     tradeFilterTitle: 'Kalshi Trade Filter',
     tfBullScore: 'Bull', tfBearScore: 'Bear', tfNoTradeScore: 'No-Trade',
@@ -178,6 +179,7 @@ const I18N = {
     kalshiWindow: 'Janela fecha',
     kalshiMarkets: 'mercados',
     kalshiStrike: 'Target', kalshiProb: 'Prob. implícita',
+    kalshiH15: '15min', kalshiH1: 'Horário',
     // Trade Filter
     tradeFilterTitle: 'Kalshi Trade Filter',
     tfBullScore: 'Bull', tfBearScore: 'Bear', tfNoTradeScore: 'No-Trade',

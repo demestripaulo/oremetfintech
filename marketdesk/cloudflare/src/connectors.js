@@ -107,11 +107,11 @@ export async function getMessariMetrics(assetKey = 'bitcoin') {
 // KALSHI_SERIES after checking GET /series?category=Crypto.
 const KALSHI_API = 'https://api.elections.kalshi.com/trade-api/v2';
 
-// Genuine 15-minute crypto series (frequency: fifteen_min). The hourly range
-// series are KXBTC / KXETH if a longer horizon is ever wanted.
+// Genuine 15-minute crypto series (frequency: fifteen_min) and the hourly
+// range series (KXBTC / KXETH), selectable per request via the horizon param.
 const KALSHI_SERIES = {
-  BTC: 'KXBTC15M',
-  ETH: 'KXETH15M',
+  '15m': { BTC: 'KXBTC15M', ETH: 'KXETH15M' },
+  '1h':  { BTC: 'KXBTC',    ETH: 'KXETH' },
 };
 
 // Normalize a raw Kalshi market object into a compact target descriptor.
@@ -141,14 +141,16 @@ function normalizeKalshiMarket(m) {
 }
 
 // asset: 'BTC'|'ETH'. refPrice (optional): center the returned ladder on it.
-export async function getKalshiTargets(asset = 'BTC', refPrice = null) {
+// horizon: '15m' (default) or '1h'.
+export async function getKalshiTargets(asset = 'BTC', refPrice = null, horizon = '15m') {
   const key = String(asset).toUpperCase();
-  const series = KALSHI_SERIES[key];
+  const hz = KALSHI_SERIES[horizon] ? horizon : '15m';
+  const series = KALSHI_SERIES[hz][key];
   if (!series) return { error: `Ativo não suportado pela Kalshi: ${asset}` };
   const ref = Number(refPrice);
   const hasRef = Number.isFinite(ref) && ref > 0;
 
-  return cached(`kalshi:${key}:${hasRef ? Math.round(ref) : 'all'}`, 30 * 1000, async () => {
+  return cached(`kalshi:${hz}:${key}:${hasRef ? Math.round(ref) : 'all'}`, 30 * 1000, async () => {
     try {
       const url = `${KALSHI_API}/markets?series_ticker=${series}&status=open&limit=1000`;
       const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
@@ -198,6 +200,7 @@ export async function getKalshiTargets(asset = 'BTC', refPrice = null) {
 
       return {
         asset: key,
+        horizon: hz,
         series,
         closeTime: earliest,
         windowMinutes,

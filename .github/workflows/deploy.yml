@@ -1,0 +1,46 @@
+name: Deploy Worker
+
+# Auto-deploy to Cloudflare on every push to main that touches the app.
+# No more manual `wrangler deploy`. Also runnable on demand from the Actions tab.
+#
+# Required repository secret (Settings → Secrets and variables → Actions):
+#   CLOUDFLARE_API_TOKEN  — a token with the "Edit Cloudflare Workers" template.
+# Optional (only if the token can't resolve the account automatically):
+#   CLOUDFLARE_ACCOUNT_ID
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'marketdesk/cloudflare/**'
+      - 'marketdesk/frontend/**'
+      - '.github/workflows/deploy.yml'
+  workflow_dispatch: {}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        working-directory: marketdesk/cloudflare
+        run: npm install
+
+      - name: Run tests
+        working-directory: marketdesk
+        run: npm install && npm test
+
+      - name: Sync frontend into public/
+        working-directory: marketdesk/cloudflare
+        run: npm run sync-assets
+
+      - name: Deploy
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: marketdesk/cloudflare

@@ -110,7 +110,8 @@ async function handleRequest(request, env) {
   if (url.pathname === '/api/connectors/kalshi') {
     const asset = url.searchParams.get('asset') || 'BTC';
     const price = url.searchParams.get('price');
-    return json(await getKalshiTargets(asset, price));
+    const horizon = url.searchParams.get('horizon') || '15m';
+    return json(await getKalshiTargets(asset, price, horizon));
   }
 
   // Anything else (/, /css/*, /js/*, ...) is the static frontend bundle.

@@ -89,6 +89,33 @@ function kalshiYesSide(tgt, spot) {
   return null;
 }
 
+function renderKalshiSection(data, spot, horizonLabel) {
+  if (!data || data.error || !Array.isArray(data.targets) || data.targets.length === 0) {
+    return `<div class="kalshi-section"><div class="kalshi-head indicator-explain"><b>${horizonLabel}</b> — ${t('kalshiUnavailable')}${data?.error || '—'}</div></div>`;
+  }
+  const closeLabel = data.closeTime
+    ? new Date(data.closeTime).toLocaleTimeString(window.LANG === 'pt' ? 'pt-BR' : 'en-US', { hour: '2-digit', minute: '2-digit' })
+    : '';
+  const rows = data.targets.map((tgt) => {
+    const prob = tgt.impliedProb != null ? `${(tgt.impliedProb * 100).toFixed(0)}%` : '—';
+    const probClass = tgt.impliedProb != null && tgt.impliedProb >= 0.5 ? 'kalshi-hi' : 'kalshi-lo';
+    const yes = kalshiYesSide(tgt, spot);
+    const label = kalshiTargetLabel(tgt);
+    return `<tr class="${yes ? 'kalshi-atm' : ''}">
+      <td class="mono">${label}</td>
+      <td class="mono ${probClass}">${prob}</td>
+    </tr>`;
+  }).join('');
+  return `
+    <div class="kalshi-section">
+      <div class="kalshi-head indicator-explain"><b>${horizonLabel}</b> · ${t('kalshiWindow')} ${closeLabel} · ${data.totalInWindow ?? data.count} ${t('kalshiMarkets')}</div>
+      <table class="history-table">
+        <thead><tr><th>${t('kalshiStrike')}</th><th>${t('kalshiProb')}</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+}
+
 async function loadKalshiTargets() {
   const container = document.getElementById('kalshi-container');
   if (!container) return;
@@ -99,35 +126,14 @@ async function loadKalshiTargets() {
   }
   const spot = window.tickerState?.[window.activeSymbol]?.price;
   const priceParam = spot ? `&price=${spot}` : '';
+  const fetchHz = (hz) => fetch(`${CONNECTORS_API_BASE}/api/connectors/kalshi?asset=${asset}&horizon=${hz}${priceParam}`)
+    .then((r) => r.json()).catch((err) => ({ error: err.message }));
   try {
-    const res = await fetch(`${CONNECTORS_API_BASE}/api/connectors/kalshi?asset=${asset}${priceParam}`);
-    const data = await res.json();
-    if (data.error || !Array.isArray(data.targets) || data.targets.length === 0) {
-      container.innerHTML = `<p class="indicator-explain">${t('kalshiUnavailable')}${data.error || ''}</p>`;
-      return;
-    }
-    const closeLabel = data.closeTime
-      ? new Date(data.closeTime).toLocaleTimeString(window.LANG === 'pt' ? 'pt-BR' : 'en-US', { hour: '2-digit', minute: '2-digit' })
-      : '';
-    const dur = data.windowMinutes ? `${data.windowMinutes}min · ` : '';
-    const spotLabel = spot != null ? `<span class="indicator-explain"> · ${t('currentPrice')}: <span class="mono">${fmtUsd(spot)}</span></span>` : '';
-    const rows = data.targets.map((tgt) => {
-      const prob = tgt.impliedProb != null ? `${(tgt.impliedProb * 100).toFixed(0)}%` : '—';
-      const probClass = tgt.impliedProb != null && tgt.impliedProb >= 0.5 ? 'kalshi-hi' : 'kalshi-lo';
-      const yes = kalshiYesSide(tgt, spot);
-      const label = kalshiTargetLabel(tgt);
-      return `<tr class="${yes ? 'kalshi-atm' : ''}">
-        <td class="mono">${label}</td>
-        <td class="mono ${probClass}">${prob}</td>
-      </tr>`;
-    }).join('');
-    container.innerHTML = `
-      <div class="kalshi-head indicator-explain">${t('kalshiWindow')} ${closeLabel} · ${dur}${data.totalInWindow ?? data.count} ${t('kalshiMarkets')}${spotLabel}</div>
-      <table class="history-table">
-        <thead><tr><th>${t('kalshiStrike')}</th><th>${t('kalshiProb')}</th></tr></thead>
-        <tbody>${rows}</tbody>
-      </table>
-    `;
+    const [m15, h1] = await Promise.all([fetchHz('15m'), fetchHz('1h')]);
+    const spotLabel = spot != null ? `<div class="indicator-explain kalshi-spot">${t('currentPrice')}: <span class="mono">${fmtUsd(spot)}</span></div>` : '';
+    container.innerHTML = spotLabel
+      + renderKalshiSection(m15, spot, t('kalshiH15'))
+      + renderKalshiSection(h1, spot, t('kalshiH1'));
   } catch (err) {
     container.innerHTML = `<p class="indicator-explain">${t('kalshiUnavailable')}${err.message}</p>`;
   }
