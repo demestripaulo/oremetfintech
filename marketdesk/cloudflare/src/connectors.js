@@ -107,9 +107,11 @@ export async function getMessariMetrics(assetKey = 'bitcoin') {
 // KALSHI_SERIES after checking GET /series?category=Crypto.
 const KALSHI_API = 'https://api.elections.kalshi.com/trade-api/v2';
 
+// Genuine 15-minute crypto series (frequency: fifteen_min). The hourly range
+// series are KXBTC / KXETH if a longer horizon is ever wanted.
 const KALSHI_SERIES = {
-  BTC: 'KXBTC',
-  ETH: 'KXETH',
+  BTC: 'KXBTC15M',
+  ETH: 'KXETH15M',
 };
 
 // Normalize a raw Kalshi market object into a compact target descriptor.
@@ -154,9 +156,11 @@ export async function getKalshiTargets(asset = 'BTC', refPrice = null) {
       const data = await res.json();
       const markets = Array.isArray(data.markets) ? data.markets : [];
 
+      // Keep every open market in the window. 15-min crypto can be directional
+      // (up/down, no strike) or strike-based — don't require a strike here.
       const all = markets
         .map(normalizeKalshiMarket)
-        .filter((t) => t && t.closeTime && (t.floorStrike != null || t.capStrike != null));
+        .filter((t) => t && t.closeTime);
       if (all.length === 0) throw new Error('Nenhum mercado aberto');
 
       // Pick the window that closes SOONEST (the shortest-horizon live market).
@@ -173,10 +177,12 @@ export async function getKalshiTargets(asset = 'BTC', refPrice = null) {
         ? Math.round((new Date(earliest).getTime() - new Date(open).getTime()) / 60000)
         : null;
 
-      // Center on the reference price: keep the nearest strikes either side.
+      // If the window is strike-based, center on the reference price; if it's
+      // directional (no strikes), just return all markets in the window.
+      const hasStrikes = window.some((t) => t.strikeMid != null);
       window.sort((a, b) => (a.strikeMid ?? 0) - (b.strikeMid ?? 0));
-      let targets = window;
-      if (hasRef) {
+      let targets;
+      if (hasStrikes && hasRef) {
         const byDist = [...window].sort(
           (a, b) => Math.abs((a.strikeMid ?? 0) - ref) - Math.abs((b.strikeMid ?? 0) - ref)
         ).slice(0, 13);
