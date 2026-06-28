@@ -10,8 +10,8 @@
 **MarketDesk** é uma mesa de análise financeira **educacional** em tempo real,
 focada em BTC, ETH, SOL, BNB e XRP. Exibe candlesticks, indicadores técnicos
 (RSI, MACD, Bollinger, ATR, padrões de vela), Market Structure Score (−5 a +5),
-previsões de range (15min/1h/diário orientadas ao Kalshi), conectores de decisão
-bull/bear, log retrospectivo de acurácia, inteligência externa (Fear & Greed,
+previsões de range (15min/1h/diário), conectores de decisão
+bull/bear, rastreador de acurácia antes/depois (15min e 1h), inteligência externa (Fear & Greed,
 sentimento, on-chain) e feed de notícias RSS.
 
 ⚠️ **Não constitui aconselhamento financeiro.**
@@ -29,8 +29,10 @@ marketdesk/
 ├── package.json               # raiz: script de testes
 ├── tests/
 │   ├── analysis.test.js       # 18 testes: RSI, MACD, ATR, Bollinger, volume, padrões, pivots
+│   ├── candles.test.js        # 5 testes: normalização + fallback multi-exchange
 │   ├── predictions.test.js    # 5 testes: engine de previsão de range
-│   └── connectors.test.js     # 4 testes: degradação graciosa dos conectores externos
+│   ├── connectors.test.js     # 4 testes: degradação graciosa dos conectores externos
+│   └── sync.test.js           # 1 teste: public/ idêntico a frontend/ (33 testes no total)
 │
 ├── cloudflare/                # ===== Deploy ativo =====
 │   ├── wrangler.toml          # config do Worker: bindings, KV, cron, assets
@@ -79,7 +81,35 @@ Rotas ativas:
 | `GET /api/connectors/news` | Feed de notícias RSS classificado |
 | `GET /ws` | WebSocket relay (delega ao Durable Object MarketHub) |
 
-Cron `*/15 * * * *`: recalcula previsões e persiste log no KV.
+Cron `*/15 * * * *`: para cada símbolo, **resolve** janelas fechadas e **registra**
+a previsão da janela atual no KV (ver "Rastreador de acurácia" abaixo).
+
+#### Rastreador de acurácia antes/depois (15min + 1h)
+
+Cada execução do cron grava registros **planos por horizonte**, alinhados às
+fronteiras de janela:
+
+- **`recordPredictions()`** — emite um registro por horizonte (`15min`, `1h`),
+  com de-duplicação por `(interval, windowStart)`. Mantém a previsão do **início
+  da janela** (o "antes"), sem sobrescrever em ticks posteriores. `/api/predictions`
+  também alimenta o tracker (append deduplicado) para preencher o log entre crons.
+- **`resolvePredictions()`** — pontua **15min e 1h** cada um na sua própria
+  fronteira (`windowEnd`), usando o preço **real** do candle de 1m naquele
+  instante (não o tick atual). Define `resolved_price`, `hit` e `status`. Há uma
+  tolerância de 5min: se o candle da fronteira estiver ausente, resolve pelo
+  fechamento mais recente para nunca deixar uma linha presa em "pending".
+- **Writer único**: a resolução roda apenas no cron, evitando corrida de
+  read-modify-write com requisições concorrentes de `/api/predictions`.
+
+Forma do registro no KV (`log:{symbol}`, FIFO até 200):
+```
+{ symbol, interval, windowStart, windowEnd, generatedAt, priceAtGeneration,
+  range_low, range_high, midpoint, bias, confidence,
+  resolved_price, hit, status: 'pending' | 'resolved' }
+```
+
+O frontend (`renderHistory`) exibe `Janela | Intervalo | Range | Real | Resultado`
+e um placar de acerto por horizonte (`acertos/total`).
 
 ### `analysis.js` — indicadores técnicos
 
@@ -119,10 +149,22 @@ Cache em memória de 5s, throttle mínimo de 120ms entre requisições.
 Relay do stream de ticker **Kraken → Coinbase** (fallback) para os 5 símbolos ativos.
 Monta candles de 1m a partir de eventos de ticker (volume via `v[0]` no Kraken,
 `last_size` no Coinbase). Reconecta com backoff exponencial 1s → 30s.
-Distribui via broadcast para todos os clientes WebSocket conectados.
 
-> ⚠️ Este relay atua como **fallback** quando o Binance direct WS do frontend
-> não está disponível. Ver seção 4 (`app.js`) para a arquitetura de dois estágios.
+**Coalescência de broadcast (best practice de performance).** As exchanges
+publicam 10–40 mensagens/s por símbolo — muito acima do que qualquer browser
+(sobretudo máquinas modestas) consegue repintar. Em vez de reenviar cada tick
+1:1, o `MarketHub` acumula o estado mais recente do candle por símbolo
+(`lastTicks`) e faz **flush no máximo uma vez por `FLUSH_INTERVAL_MS` (1s)** via
+`scheduleFlush()`, enviando cada símbolo "sujo" uma única vez. Isso reduz o
+volume de mensagens ~10–40× e é a alavanca isolada mais importante para manter
+clientes fracos responsivos. Quando não há clientes conectados
+(`clients.size === 0`), o timer não é agendado — evita-se um DO ocioso rodando
+um timer perpétuo.
+
+> ⚠️ Este relay é a **única** fonte de tempo real do frontend (ver seção 4).
+> Tentativas de conexão direta browser→Binance foram revertidas: a Binance
+> emite por trade individual (dezenas/s), o que travava clientes sem a
+> coalescência que o relay provê naturalmente no servidor.
 
 ### `connectors.js` — integrações externas
 
@@ -148,20 +190,32 @@ Controller principal. Gerencia:
 - Polling de candles a cada 15s quando fora do timeframe 1m
 - Exibe `source` (exchange) recebida de `/api/candles` no cabeçalho do gráfico
 
-#### Arquitetura WebSocket de dois estágios
+#### WebSocket (DO relay) e defesas de performance no cliente
 
 ```
-Estágio 1 (primário)  — Binance direct WS — browser → wss://stream.binance.com
-Estágio 2 (fallback)  — DO relay          — browser → /ws → Durable Object → Kraken/Coinbase
+browser → /ws → Durable Object MarketHub → Kraken/Coinbase
 ```
 
-**Binance direct WS** (`connectBinanceWS`): abre `stream.binance.com/stream?streams=btcusdt@kline_1m/...` diretamente do browser, eliminando o hop do Cloudflare DO. O stream `@kline_1m` da Binance publica OHLCV completo a cada ~2s enquanto o candle está se formando. Quando ativo (`binanceWsActive = true`), o DO relay só atualiza o ticker bar como backup; o gráfico usa apenas o feed Binance.
+`connectWS()` mantém uma única conexão ao relay. O servidor já coalesce os ticks
+(ver seção 3, `websocket.js`), então o cliente recebe ~1 mensagem/símbolo/s. Para
+proteger máquinas modestas, o frontend ainda aplica:
 
-**DO relay** (`connectWS`): permanece conectado como fallback. Assume o controle do gráfico automaticamente se o Binance WS cair.
+- **`buildTickerBar()` uma vez** — a barra é construída uma única vez e os updates
+  tocam só `textContent`/classes, sem reconstruir `innerHTML` a cada tick (evita
+  reflow e descarte/recriação de nós).
+- **Listener delegado único** em `#ticker-bar` (não re-registra 5 listeners por
+  render).
+- **`scheduleTickerRender()`** — coalesce repaints para no máximo 1 por
+  `requestAnimationFrame` (~60fps; pausa automaticamente com a aba em segundo
+  plano).
+- **`smaLine` O(n)** em `chart.js` (soma deslizante, antes era O(n·período)).
+- **Reconexão única** — guard `wsReconnectScheduled` impede que `close`+`error`
+  agendem duas reconexões para o mesmo socket morto.
+- **Timers de countdown limpos** antes de re-armar cada janela (sem acúmulo).
 
-**`applyRealtimeTick(symbol, candle)`**: função compartilhada pelos dois estágios. Alinha o timestamp do tick de 1m ao bucket do timeframe ativo (`candle.time - candle.time % period`) antes de chamar `chart.updateLastCandle()`, garantindo que o candle existente seja atualizado em vez de um novo ser adicionado ao gráfico.
-
-**Feature flag** para reverter: em `index.html`, setar `USE_BINANCE_DIRECT_WS: false` no `MARKETDESK_CONFIG` desativa o Binance WS e usa somente o DO relay.
+> Nota histórica: uma arquitetura browser→Binance direta (REST + WS) foi testada
+> e revertida — travava clientes por excesso de mensagens. A coalescência no
+> relay (servidor) é a abordagem mantida.
 
 ### `chart.js`
 
@@ -195,15 +249,17 @@ Altura do gráfico: `clamp(320px, 52vh, 620px)`.
 Todos importam de `cloudflare/src/`:
 
 ```bash
-node --test tests/analysis.test.js tests/predictions.test.js tests/connectors.test.js
-# 27 testes passando
+npm test          # node --test tests/*.test.js
+# 33 testes passando
 ```
 
 | Arquivo | Qtd | Cobre |
 |---|---|---|
 | `analysis.test.js` | 18 | RSI, MACD, ATR, Bollinger, volume ratio, padrões de candle, pivot points, sma/ema |
+| `candles.test.js` | 5 | normalização e fallback multi-exchange de candles |
 | `predictions.test.js` | 5 | formato de saída, range 15min < 1h, viés em tendência, exemplo BTC |
 | `connectors.test.js` | 4 | degradação graciosa: FearGreed, CoinGecko, Glassnode sem chave, shape de getExternalIntelligence |
+| `sync.test.js` | 1 | `cloudflare/public` idêntico a `frontend` (guarda de sincronização) |
 
 ---
 
