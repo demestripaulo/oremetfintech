@@ -89,6 +89,9 @@ const I18N = {
     kxAgree: 'Agree', kxAgreeNo: 'Agree (no)', kxDiverge: 'Diverge', kxModelOnly: 'model',
     kxCalibTitle: 'Calibration (15-min)', kxCalibPending: 'collecting data — needs resolved windows',
     kxCalibModel: 'Model Brier', kxCalibMarket: 'Market Brier', kxCalibSkill: 'Model skill',
+    kxPaperTitle: 'Paper P&L (sim, 15-min)', kxPaperPending: 'no qualifying trades yet',
+    kxPaperTrades: 'trades', kxPaperPnl: 'net', kxPaperHit: 'hit',
+    kxPaperNote: 'Simulated only, after fees — not real orders, not advice.',
     kalshiH15: '15-min', kalshiH1: 'Hourly',
     // Trade Filter
     tradeFilterTitle: 'Kalshi Trade Filter',
@@ -187,6 +190,9 @@ const I18N = {
     kxAgree: 'Concorda', kxAgreeNo: 'Concorda (não)', kxDiverge: 'Diverge', kxModelOnly: 'modelo',
     kxCalibTitle: 'Calibração (15min)', kxCalibPending: 'coletando dados — precisa de janelas resolvidas',
     kxCalibModel: 'Brier Modelo', kxCalibMarket: 'Brier Mercado', kxCalibSkill: 'Skill do modelo',
+    kxPaperTitle: 'P&L Simulado (15min)', kxPaperPending: 'nenhum trade qualificado ainda',
+    kxPaperTrades: 'trades', kxPaperPnl: 'líquido', kxPaperHit: 'acerto',
+    kxPaperNote: 'Apenas simulação, pós-fee — não são ordens reais nem recomendação.',
     kalshiH15: '15min', kalshiH1: 'Horário',
     // Trade Filter
     tradeFilterTitle: 'Kalshi Trade Filter',

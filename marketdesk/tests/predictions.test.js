@@ -3,7 +3,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { predictRange, normalCdf, modelProbForTarget, combineProb } from '../cloudflare/src/predictions.js';
+import { predictRange, normalCdf, modelProbForTarget, combineProb, simulatePaperTrades } from '../cloudflare/src/predictions.js';
 
 function makeCandle(time, open, high, low, close, volume = 100) {
   return { time, open, high, low, close, volume };
@@ -96,4 +96,28 @@ test('combineProb flags agreement, divergence, and value edges', () => {
   assert.equal(combineProb(null, 0.5).signal, 'NO_MODEL');
   assert.equal(combineProb(0.75, 0.6).value, 'yes_value'); // edge +0.15
   assert.equal(combineProb(0.4, 0.6).value, 'no_value');   // edge -0.20
+});
+
+test('simulatePaperTrades only trades on edge and accounts for fees/outcome', () => {
+  const samples = [
+    // edge +0.20 (model 70 vs market 50), YES, and it won → profitable
+    { status: 'resolved', outcome: 1, marketProb: 0.5, modelProb: 0.7 },
+    // edge below threshold → skipped
+    { status: 'resolved', outcome: 1, marketProb: 0.5, modelProb: 0.54 },
+    // pending → ignored
+    { status: 'pending', outcome: null, marketProb: 0.5, modelProb: 0.9 },
+  ];
+  const r = simulatePaperTrades(samples, { edgeThreshold: 0.10, feeRate: 0.07, contracts: 1 });
+  assert.equal(r.trades, 1);
+  assert.equal(r.wins, 1);
+  assert.equal(r.skipped, 1);
+  // Won YES bought at 0.50: gross +0.50, minus fee 0.07*0.25=0.0175 → ~0.4825
+  assert.ok(r.pnl > 0.47 && r.pnl < 0.49, `pnl ${r.pnl}`);
+  assert.ok(r.roi > 0);
+});
+
+test('simulatePaperTrades returns zero trades when no edge clears threshold', () => {
+  const r = simulatePaperTrades([{ status: 'resolved', outcome: 0, marketProb: 0.5, modelProb: 0.52 }]);
+  assert.equal(r.trades, 0);
+  assert.equal(r.pnl, 0);
 });

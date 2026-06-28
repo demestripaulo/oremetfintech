@@ -140,6 +140,47 @@ export function crossKalshiTargets(prediction, targets) {
   return targets;
 }
 
+// ---------- Phase 1: paper-trading P&L simulator (no real money) ----------
+// Replays resolved calibration samples through a fee-aware strategy:
+// trade only when the model edge clears a threshold; buy the side the model
+// favors at the market price; settle vs the binary outcome. Fees use Kalshi's
+// quadratic shape (~feeRate · p · (1−p) per contract).
+export const PAPER_CONFIG = { edgeThreshold: 0.10, feeRate: 0.07, contracts: 1 };
+
+export function simulatePaperTrades(samples, config = PAPER_CONFIG) {
+  const cfg = { ...PAPER_CONFIG, ...config };
+  const usable = (samples || []).filter((e) =>
+    e && e.status === 'resolved' && typeof e.outcome === 'number'
+    && typeof e.marketProb === 'number' && typeof e.modelProb === 'number');
+
+  let trades = 0, wins = 0, pnl = 0, fees = 0, staked = 0;
+  for (const e of usable) {
+    const edge = e.modelProb - e.marketProb;
+    if (Math.abs(edge) < cfg.edgeThreshold) continue;       // no clear value → skip
+    const side = edge > 0 ? 'yes' : 'no';
+    const price = side === 'yes' ? e.marketProb : 1 - e.marketProb;
+    if (price <= 0 || price >= 1) continue;                 // no executable price
+    const fee = cfg.feeRate * e.marketProb * (1 - e.marketProb) * cfg.contracts;
+    const won = side === 'yes' ? e.outcome === 1 : e.outcome === 0;
+    const gross = ((won ? 1 : 0) - price) * cfg.contracts;
+    pnl += gross - fee;
+    fees += fee;
+    staked += price * cfg.contracts;
+    trades += 1;
+    if (won) wins += 1;
+  }
+  return {
+    trades,
+    wins,
+    skipped: usable.length - trades,
+    hitRate: trades ? round(wins / trades, 3) : null,
+    pnl: round(pnl, 2),              // net $ per `contracts` units, after fees
+    fees: round(fees, 2),
+    roi: staked ? round(pnl / staked, 3) : null,  // net P&L / total staked
+    config: cfg,
+  };
+}
+
 // Returns hours remaining until 5:00 PM US Eastern Time (ET = UTC-5 / UTC-4 DST).
 function hoursUntil5pmET() {
   const now = new Date();

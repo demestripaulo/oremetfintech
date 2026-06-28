@@ -108,6 +108,24 @@ function renderKalshiCalibration(c) {
     </div>`;
 }
 
+// Phase-1 paper-trading readout (simulated, no real money).
+function renderKalshiPaper(p) {
+  if (!p || p.trades == null) return '';
+  if (p.trades === 0) {
+    return `<div class="kalshi-calib indicator-explain"><b>${t('kxPaperTitle')}</b>: ${t('kxPaperPending')}</div>`;
+  }
+  const pnlClass = p.pnl >= 0 ? 'kx-agree' : 'kx-diverge';
+  const roiTxt = p.roi != null ? `${p.roi > 0 ? '+' : ''}${(p.roi * 100).toFixed(0)}%` : '—';
+  return `
+    <div class="kalshi-calib indicator-explain">
+      <b>${t('kxPaperTitle')}</b> · ${p.trades} ${t('kxPaperTrades')} ·
+      ${t('kxPaperPnl')} <span class="mono ${pnlClass}">${p.pnl >= 0 ? '+' : ''}${p.pnl}</span> ·
+      ROI <span class="${pnlClass}">${roiTxt}</span> ·
+      ${t('kxPaperHit')} ${p.hitRate != null ? (p.hitRate * 100).toFixed(0) + '%' : '—'}
+      <div class="kx-paper-note">${t('kxPaperNote')}</div>
+    </div>`;
+}
+
 // Compact badge summarizing the model-vs-market crossing for a target.
 function kalshiVerdictBadge(cross) {
   if (!cross || !cross.signal) return '<span class="indicator-explain">—</span>';
@@ -167,16 +185,18 @@ async function loadKalshiTargets() {
   const fetchHz = (hz) => fetch(`${CONNECTORS_API_BASE}/api/connectors/kalshi?asset=${asset}&horizon=${hz}${priceParam}`)
     .then((r) => r.json()).catch((err) => ({ error: err.message }));
   try {
-    const [m15, h1, calib] = await Promise.all([
+    const [m15, h1, calib, paper] = await Promise.all([
       fetchHz('15m'),
       fetchHz('1h'),
       fetch(`${CONNECTORS_API_BASE}/api/calibration?symbol=${window.activeSymbol}`).then((r) => r.json()).catch(() => null),
+      fetch(`${CONNECTORS_API_BASE}/api/paper?symbol=${window.activeSymbol}`).then((r) => r.json()).catch(() => null),
     ]);
     const spotLabel = spot != null ? `<div class="indicator-explain kalshi-spot">${t('currentPrice')}: <span class="mono">${fmtUsd(spot)}</span></div>` : '';
     container.innerHTML = spotLabel
       + renderKalshiSection(m15, spot, t('kalshiH15'))
       + renderKalshiSection(h1, spot, t('kalshiH1'))
-      + renderKalshiCalibration(calib);
+      + renderKalshiCalibration(calib)
+      + renderKalshiPaper(paper);
   } catch (err) {
     container.innerHTML = `<p class="indicator-explain">${t('kalshiUnavailable')}${err.message}</p>`;
   }

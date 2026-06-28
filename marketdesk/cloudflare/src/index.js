@@ -1,6 +1,6 @@
 import { fetchKlines, fetch24hTicker, SYMBOLS } from './binance.js';
 import { buildIndicatorPanel } from './analysis.js';
-import { predictRange, crossKalshiTargets, modelProbForTarget } from './predictions.js';
+import { predictRange, crossKalshiTargets, modelProbForTarget, simulatePaperTrades } from './predictions.js';
 import {
   getFearGreedIndex,
   getExternalIntelligence,
@@ -140,6 +140,13 @@ async function handleRequest(request, env) {
     const raw = await env.MARKET_KV.get(`calib:${symbol}`);
     const log = raw ? JSON.parse(raw) : [];
     return json({ symbol, ...calibrationSummary(log) });
+  }
+
+  if (url.pathname === '/api/paper') {
+    const symbol = url.searchParams.get('symbol') || 'BTCUSDT';
+    const raw = await env.MARKET_KV.get(`calib:${symbol}`);
+    const log = raw ? JSON.parse(raw) : [];
+    return json({ symbol, ...simulatePaperTrades(log) });
   }
 
   // Anything else (/, /css/*, /js/*, ...) is the static frontend bundle.
