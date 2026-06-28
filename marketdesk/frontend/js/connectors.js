@@ -70,8 +70,10 @@ async function loadKalshiTargets() {
     container.innerHTML = `<p class="indicator-explain">${t('kalshiOnlyBtcEth')}</p>`;
     return;
   }
+  const spot = window.tickerState?.[window.activeSymbol]?.price;
+  const priceParam = spot ? `&price=${spot}` : '';
   try {
-    const res = await fetch(`${CONNECTORS_API_BASE}/api/connectors/kalshi?asset=${asset}`);
+    const res = await fetch(`${CONNECTORS_API_BASE}/api/connectors/kalshi?asset=${asset}${priceParam}`);
     const data = await res.json();
     if (data.error || !Array.isArray(data.targets) || data.targets.length === 0) {
       container.innerHTML = `<p class="indicator-explain">${t('kalshiUnavailable')}${data.error || ''}</p>`;
@@ -80,17 +82,20 @@ async function loadKalshiTargets() {
     const closeLabel = data.closeTime
       ? new Date(data.closeTime).toLocaleTimeString(window.LANG === 'pt' ? 'pt-BR' : 'en-US', { hour: '2-digit', minute: '2-digit' })
       : '';
-    const rows = data.targets.slice(0, 12).map((tgt) => {
-      const strike = tgt.floorStrike ?? tgt.capStrike;
+    const dur = data.windowMinutes ? `${data.windowMinutes}min · ` : '';
+    const rows = data.targets.map((tgt) => {
       const prob = tgt.impliedProb != null ? `${(tgt.impliedProb * 100).toFixed(0)}%` : '—';
       const probClass = tgt.impliedProb != null && tgt.impliedProb >= 0.5 ? 'kalshi-hi' : 'kalshi-lo';
-      return `<tr>
-        <td class="mono">${strike != null ? '$' + Number(strike).toLocaleString() : tgt.title}</td>
+      // Highlight the strike band that currently contains spot.
+      const atMoney = spot != null && tgt.floorStrike != null && tgt.capStrike != null
+        && spot >= tgt.floorStrike && spot <= tgt.capStrike;
+      return `<tr class="${atMoney ? 'kalshi-atm' : ''}">
+        <td class="mono">${tgt.title}</td>
         <td class="mono ${probClass}">${prob}</td>
       </tr>`;
     }).join('');
     container.innerHTML = `
-      <div class="kalshi-head indicator-explain">${t('kalshiWindow')} ${closeLabel} · ${data.count} ${t('kalshiMarkets')}</div>
+      <div class="kalshi-head indicator-explain">${t('kalshiWindow')} ${closeLabel} · ${dur}${data.totalInWindow ?? data.count} ${t('kalshiMarkets')}</div>
       <table class="history-table">
         <thead><tr><th>${t('kalshiStrike')}</th><th>${t('kalshiProb')}</th></tr></thead>
         <tbody>${rows}</tbody>

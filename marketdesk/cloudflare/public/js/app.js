@@ -85,6 +85,7 @@ function drainAlertQueue() {
 
 // ---------- Ticker bar ----------
 window.activeSymbol = activeSymbol;
+window.tickerState = tickerState; // exposed for the Kalshi panel (same ref, mutated in place)
 
 // Cache of per-symbol DOM nodes so updates touch only text/classes instead of
 // rebuilding innerHTML (avoids reflow + listener churn on every WS tick).

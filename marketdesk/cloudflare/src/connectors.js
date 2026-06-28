@@ -119,52 +119,84 @@ function normalizeKalshiMarket(m) {
   const yesAsk = typeof m.yes_ask === 'number' ? m.yes_ask : null;
   let impliedProb = null;
   if (yesBid != null && yesAsk != null) impliedProb = (yesBid + yesAsk) / 2 / 100;
-  else if (typeof m.last_price === 'number') impliedProb = m.last_price / 100;
+  else if (typeof m.last_price === 'number' && m.last_price > 0) impliedProb = m.last_price / 100;
+  // Midpoint of a 'between' market, else the single strike — used for centering.
+  const floor = typeof m.floor_strike === 'number' ? m.floor_strike : null;
+  const cap = typeof m.cap_strike === 'number' ? m.cap_strike : null;
+  const mid = floor != null && cap != null ? (floor + cap) / 2 : (floor ?? cap);
   return {
     ticker: m.ticker || null,
     title: m.yes_sub_title || m.subtitle || m.title || m.ticker || '',
-    floorStrike: typeof m.floor_strike === 'number' ? m.floor_strike : null,
-    capStrike: typeof m.cap_strike === 'number' ? m.cap_strike : null,
+    floorStrike: floor,
+    capStrike: cap,
+    strikeMid: mid,
     strikeType: m.strike_type || null,
     impliedProb,            // 0..1, or null
+    volume: typeof m.volume === 'number' ? m.volume : null,
+    openTime: m.open_time || null,
     closeTime: m.close_time || m.expiration_time || null,
   };
 }
 
-export async function getKalshiTargets(asset = 'BTC') {
+// asset: 'BTC'|'ETH'. refPrice (optional): center the returned ladder on it.
+export async function getKalshiTargets(asset = 'BTC', refPrice = null) {
   const key = String(asset).toUpperCase();
   const series = KALSHI_SERIES[key];
   if (!series) return { error: `Ativo não suportado pela Kalshi: ${asset}` };
+  const ref = Number(refPrice);
+  const hasRef = Number.isFinite(ref) && ref > 0;
 
-  return cached(`kalshi:${key}`, 30 * 1000, async () => {
+  return cached(`kalshi:${key}:${hasRef ? Math.round(ref) : 'all'}`, 30 * 1000, async () => {
     try {
-      const url = `${KALSHI_API}/markets?series_ticker=${series}&status=open&limit=200`;
+      const url = `${KALSHI_API}/markets?series_ticker=${series}&status=open&limit=1000`;
       const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
       if (!res.ok) throw new Error(`Kalshi HTTP ${res.status}`);
       const data = await res.json();
       const markets = Array.isArray(data.markets) ? data.markets : [];
 
-      // Keep only markets whose window closes within the next ~16 minutes —
-      // i.e. the live 15-minute window.
-      const now = Date.now();
-      const horizon = now + 16 * 60 * 1000;
-      const current = markets.filter((m) => {
-        const ct = m.close_time || m.expiration_time;
-        if (!ct) return false;
-        const t = new Date(ct).getTime();
-        return t >= now && t <= horizon;
-      });
-
-      const pool = current.length > 0 ? current : markets;
-      const targets = pool
+      const all = markets
         .map(normalizeKalshiMarket)
-        .filter((t) => t && (t.floorStrike != null || t.capStrike != null))
-        .sort((a, b) => (a.floorStrike ?? a.capStrike ?? 0) - (b.floorStrike ?? b.capStrike ?? 0));
+        .filter((t) => t && t.closeTime && (t.floorStrike != null || t.capStrike != null));
+      if (all.length === 0) throw new Error('Nenhum mercado aberto');
 
-      if (targets.length === 0) throw new Error('Nenhum mercado 15min aberto');
+      // Pick the window that closes SOONEST (the shortest-horizon live market).
+      const now = Date.now();
+      const future = all.filter((t) => new Date(t.closeTime).getTime() > now);
+      const pool = future.length > 0 ? future : all;
+      let earliest = pool[0].closeTime;
+      for (const t of pool) if (new Date(t.closeTime) < new Date(earliest)) earliest = t.closeTime;
+      let window = pool.filter((t) => t.closeTime === earliest);
 
-      const closeTime = targets[0].closeTime;
-      return { asset: key, series, closeTime, count: targets.length, targets, source: 'Kalshi' };
+      // Window length in minutes (honest label — KXBTC is hourly, not 15min).
+      const open = window.find((t) => t.openTime)?.openTime;
+      const windowMinutes = open
+        ? Math.round((new Date(earliest).getTime() - new Date(open).getTime()) / 60000)
+        : null;
+
+      // Center on the reference price: keep the nearest strikes either side.
+      window.sort((a, b) => (a.strikeMid ?? 0) - (b.strikeMid ?? 0));
+      let targets = window;
+      if (hasRef) {
+        const byDist = [...window].sort(
+          (a, b) => Math.abs((a.strikeMid ?? 0) - ref) - Math.abs((b.strikeMid ?? 0) - ref)
+        ).slice(0, 13);
+        const keep = new Set(byDist.map((t) => t.ticker));
+        targets = window.filter((t) => keep.has(t.ticker));
+      } else {
+        targets = window.slice(0, 13);
+      }
+
+      return {
+        asset: key,
+        series,
+        closeTime: earliest,
+        windowMinutes,
+        totalInWindow: window.length,
+        count: targets.length,
+        refPrice: hasRef ? ref : null,
+        targets,
+        source: 'Kalshi',
+      };
     } catch (err) {
       return { error: err.message };
     }
