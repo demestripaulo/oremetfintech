@@ -89,6 +89,19 @@ function kalshiYesSide(tgt, spot) {
   return null;
 }
 
+// Compact badge summarizing the model-vs-market crossing for a target.
+function kalshiVerdictBadge(cross) {
+  if (!cross || !cross.signal) return '<span class="indicator-explain">—</span>';
+  const edgePts = cross.edge != null ? `${cross.edge > 0 ? '+' : ''}${(cross.edge * 100).toFixed(0)}pt` : '';
+  switch (cross.signal) {
+    case 'AGREE_YES': return `<span class="kx-agree">${t('kxAgree')} ✓</span>`;
+    case 'AGREE_NO':  return `<span class="kx-agree">${t('kxAgreeNo')} ✓</span>`;
+    case 'DIVERGE':   return `<span class="kx-diverge">${t('kxDiverge')} ${edgePts}</span>`;
+    case 'MODEL_ONLY': return `<span class="indicator-explain">${t('kxModelOnly')}</span>`;
+    default: return '<span class="indicator-explain">—</span>';
+  }
+}
+
 function renderKalshiSection(data, spot, horizonLabel) {
   if (!data || data.error || !Array.isArray(data.targets) || data.targets.length === 0) {
     return `<div class="kalshi-section"><div class="kalshi-head indicator-explain"><b>${horizonLabel}</b> — ${t('kalshiUnavailable')}${data?.error || '—'}</div></div>`;
@@ -96,21 +109,27 @@ function renderKalshiSection(data, spot, horizonLabel) {
   const closeLabel = data.closeTime
     ? new Date(data.closeTime).toLocaleTimeString(window.LANG === 'pt' ? 'pt-BR' : 'en-US', { hour: '2-digit', minute: '2-digit' })
     : '';
+  const pct = (p) => (p != null ? `${(p * 100).toFixed(0)}%` : '—');
   const rows = data.targets.map((tgt) => {
-    const prob = tgt.impliedProb != null ? `${(tgt.impliedProb * 100).toFixed(0)}%` : '—';
-    const probClass = tgt.impliedProb != null && tgt.impliedProb >= 0.5 ? 'kalshi-hi' : 'kalshi-lo';
+    const mkt = pct(tgt.impliedProb);
+    const mktClass = tgt.impliedProb != null && tgt.impliedProb >= 0.5 ? 'kalshi-hi' : 'kalshi-lo';
+    const mdl = pct(tgt.modelProb);
+    const mdlClass = tgt.modelProb != null && tgt.modelProb >= 0.5 ? 'kalshi-hi' : 'kalshi-lo';
     const yes = kalshiYesSide(tgt, spot);
     const label = kalshiTargetLabel(tgt);
+    const verdict = kalshiVerdictBadge(tgt.cross);
     return `<tr class="${yes ? 'kalshi-atm' : ''}">
       <td class="mono">${label}</td>
-      <td class="mono ${probClass}">${prob}</td>
+      <td class="mono ${mktClass}">${mkt}</td>
+      <td class="mono ${mdlClass}">${mdl}</td>
+      <td>${verdict}</td>
     </tr>`;
   }).join('');
   return `
     <div class="kalshi-section">
       <div class="kalshi-head indicator-explain"><b>${horizonLabel}</b> · ${t('kalshiWindow')} ${closeLabel} · ${data.totalInWindow ?? data.count} ${t('kalshiMarkets')}</div>
       <table class="history-table">
-        <thead><tr><th>${t('kalshiStrike')}</th><th>${t('kalshiProb')}</th></tr></thead>
+        <thead><tr><th>${t('kalshiStrike')}</th><th>${t('kalshiMarket')}</th><th>${t('kalshiModel')}</th><th>${t('kalshiVerdict')}</th></tr></thead>
         <tbody>${rows}</tbody>
       </table>
     </div>`;

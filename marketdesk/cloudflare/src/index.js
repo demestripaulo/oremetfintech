@@ -1,6 +1,6 @@
 import { fetchKlines, fetch24hTicker, SYMBOLS } from './binance.js';
 import { buildIndicatorPanel } from './analysis.js';
-import { predictRange } from './predictions.js';
+import { predictRange, crossKalshiTargets } from './predictions.js';
 import {
   getFearGreedIndex,
   getExternalIntelligence,
@@ -111,7 +111,25 @@ async function handleRequest(request, env) {
     const asset = url.searchParams.get('asset') || 'BTC';
     const price = url.searchParams.get('price');
     const horizon = url.searchParams.get('horizon') || '15m';
-    return json(await getKalshiTargets(asset, price, horizon));
+    const result = await getKalshiTargets(asset, price, horizon);
+    // Cross with the internal model: attach model prob + agreement verdict.
+    if (!result.error && Array.isArray(result.targets) && result.targets.length > 0) {
+      try {
+        const symbol = `${asset.toUpperCase()}USDT`;
+        const { candles } = await fetchKlines(symbol, '1m', 200);
+        const prediction = predictRange(candles, horizon === '1h' ? '1h' : '15min');
+        crossKalshiTargets(prediction, result.targets);
+        result.model = {
+          midpoint: prediction.midpoint,
+          range_low: prediction.range_low,
+          range_high: prediction.range_high,
+          bias: prediction.bias,
+        };
+      } catch (err) {
+        console.error('Kalshi model cross failed', err);
+      }
+    }
+    return json(result);
   }
 
   // Anything else (/, /css/*, /js/*, ...) is the static frontend bundle.

@@ -85,6 +85,8 @@ const I18N = {
     kalshiWindow: 'Window closes',
     kalshiMarkets: 'markets',
     kalshiStrike: 'Target', kalshiProb: 'Implied prob.',
+    kalshiMarket: 'Market', kalshiModel: 'Model', kalshiVerdict: 'Cross',
+    kxAgree: 'Agree', kxAgreeNo: 'Agree (no)', kxDiverge: 'Diverge', kxModelOnly: 'model',
     kalshiH15: '15-min', kalshiH1: 'Hourly',
     // Trade Filter
     tradeFilterTitle: 'Kalshi Trade Filter',
@@ -179,6 +181,8 @@ const I18N = {
     kalshiWindow: 'Janela fecha',
     kalshiMarkets: 'mercados',
     kalshiStrike: 'Target', kalshiProb: 'Prob. implícita',
+    kalshiMarket: 'Mercado', kalshiModel: 'Modelo', kalshiVerdict: 'Cruzam.',
+    kxAgree: 'Concorda', kxAgreeNo: 'Concorda (não)', kxDiverge: 'Diverge', kxModelOnly: 'modelo',
     kalshiH15: '15min', kalshiH1: 'Horário',
     // Trade Filter
     tradeFilterTitle: 'Kalshi Trade Filter',

@@ -80,6 +80,66 @@ export function predictRange(candles, interval, lang = 'en') {
   };
 }
 
+// ---------- Model ⇄ market probability crossing ----------
+// Standard normal CDF via the Abramowitz-Stegun erf approximation.
+export function normalCdf(x) {
+  const t = 1 / (1 + 0.2316419 * Math.abs(x));
+  const d = 0.3989422804014327 * Math.exp(-x * x / 2);
+  let p = d * t * (0.3193815 + t * (-0.3565638 + t * (1.781478 + t * (-1.821256 + t * 1.330274))));
+  return x > 0 ? 1 - p : p;
+}
+
+// Treat the forecast as ~Normal(mean=midpoint, sigma=half the projected band).
+// The band is heuristic, not a true CI, so this is an APPROXIMATION used only to
+// compare against the market's implied probability — never a guarantee.
+function modelSigma(prediction) {
+  const s = (prediction.range_high - prediction.range_low) / 2;
+  return s > 0 ? s : Math.max(1e-6, Math.abs(prediction.midpoint) * 0.001);
+}
+
+// Model-implied probability that the settlement satisfies a Kalshi target.
+export function modelProbForTarget(prediction, target) {
+  const m = prediction.midpoint;
+  const s = modelSigma(prediction);
+  const probAbove = (k) => 1 - normalCdf((k - m) / s);
+  const type = target.strikeType || '';
+  if (type === 'between' && target.floorStrike != null && target.capStrike != null) {
+    return normalCdf((target.capStrike - m) / s) - normalCdf((target.floorStrike - m) / s);
+  }
+  if (type.startsWith('less') && (target.capStrike ?? target.floorStrike) != null) {
+    return 1 - probAbove(target.capStrike ?? target.floorStrike);
+  }
+  if (target.floorStrike != null) return probAbove(target.floorStrike); // greater_or_equal default
+  return null;
+}
+
+// Combine model probability with the market's implied probability.
+// edge > 0 ⇒ model thinks YES is underpriced by the market.
+export function combineProb(modelP, marketP, edgeThreshold = 0.08) {
+  if (modelP == null) return { signal: 'NO_MODEL', agree: null, edge: null };
+  if (marketP == null) return { signal: 'MODEL_ONLY', agree: null, edge: null, modelP };
+  const edge = modelP - marketP;
+  const agree = (modelP >= 0.5) === (marketP >= 0.5);
+  let signal;
+  if (!agree) signal = 'DIVERGE';
+  else signal = modelP >= 0.5 ? 'AGREE_YES' : 'AGREE_NO';
+  let value = 'fair';
+  if (edge >= edgeThreshold) value = 'yes_value';
+  else if (edge <= -edgeThreshold) value = 'no_value';
+  return { signal, agree, edge: round(edge, 3), value, modelP: round(modelP, 3), marketP: round(marketP, 3) };
+}
+
+// Enrich Kalshi targets in place with model probability + crossing verdict.
+export function crossKalshiTargets(prediction, targets) {
+  if (!prediction || !Array.isArray(targets)) return targets;
+  for (const t of targets) {
+    const modelP = modelProbForTarget(prediction, t);
+    t.modelProb = modelP == null ? null : round(modelP, 3);
+    t.cross = combineProb(modelP, t.impliedProb);
+  }
+  return targets;
+}
+
 // Returns hours remaining until 5:00 PM US Eastern Time (ET = UTC-5 / UTC-4 DST).
 function hoursUntil5pmET() {
   const now = new Date();

@@ -3,7 +3,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { predictRange } from '../cloudflare/src/predictions.js';
+import { predictRange, normalCdf, modelProbForTarget, combineProb } from '../cloudflare/src/predictions.js';
 
 function makeCandle(time, open, high, low, close, volume = 100) {
   return { time, open, high, low, close, volume };
@@ -70,4 +70,30 @@ test('example output for BTC-like synthetic data is internally consistent', () =
 
   assert.ok(fifteenMin.range_low > 0);
   assert.ok(oneHour.range_low > 0);
+});
+
+test('normalCdf is well-behaved (monotone, symmetric, bounded)', () => {
+  assert.ok(Math.abs(normalCdf(0) - 0.5) < 1e-6);
+  assert.ok(normalCdf(-5) >= 0 && normalCdf(5) <= 1);
+  assert.ok(normalCdf(1) > normalCdf(0) && normalCdf(0) > normalCdf(-1));
+  assert.ok(Math.abs(normalCdf(1.96) - 0.975) < 0.01);
+});
+
+test('modelProbForTarget: prob is higher when strike is below the midpoint', () => {
+  const prediction = { midpoint: 100, range_low: 90, range_high: 110 };
+  const below = modelProbForTarget(prediction, { strikeType: 'greater_or_equal', floorStrike: 90 });
+  const above = modelProbForTarget(prediction, { strikeType: 'greater_or_equal', floorStrike: 110 });
+  assert.ok(below > 0.5, 'P(>= below-midpoint strike) should exceed 0.5');
+  assert.ok(above < 0.5, 'P(>= above-midpoint strike) should be under 0.5');
+  assert.ok(below > above);
+});
+
+test('combineProb flags agreement, divergence, and value edges', () => {
+  assert.equal(combineProb(0.7, 0.65).signal, 'AGREE_YES');
+  assert.equal(combineProb(0.3, 0.4).signal, 'AGREE_NO');
+  assert.equal(combineProb(0.7, 0.3).signal, 'DIVERGE');
+  assert.equal(combineProb(0.7, null).signal, 'MODEL_ONLY');
+  assert.equal(combineProb(null, 0.5).signal, 'NO_MODEL');
+  assert.equal(combineProb(0.75, 0.6).value, 'yes_value'); // edge +0.15
+  assert.equal(combineProb(0.4, 0.6).value, 'no_value');   // edge -0.20
 });
