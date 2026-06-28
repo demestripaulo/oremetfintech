@@ -96,6 +96,81 @@ export async function getMessariMetrics(assetKey = 'bitcoin') {
   });
 }
 
+// ---------- Kalshi 15-min crypto targets ----------
+// Kalshi's market-data GET endpoints are public (no auth). We read the OPEN
+// markets for the BTC/ETH short-horizon price series and surface their strikes
+// ("targets") plus the implied probability from the order book mid.
+//
+// NOTE: Kalshi may block Cloudflare egress IPs (like Binance does) and the
+// series tickers below can change on their side. Everything degrades to
+// { error } so the panel never breaks. If discovery returns nothing, update
+// KALSHI_SERIES after checking GET /series?category=Crypto.
+const KALSHI_API = 'https://api.elections.kalshi.com/trade-api/v2';
+
+const KALSHI_SERIES = {
+  BTC: 'KXBTC',
+  ETH: 'KXETH',
+};
+
+// Normalize a raw Kalshi market object into a compact target descriptor.
+function normalizeKalshiMarket(m) {
+  if (!m) return null;
+  const yesBid = typeof m.yes_bid === 'number' ? m.yes_bid : null;
+  const yesAsk = typeof m.yes_ask === 'number' ? m.yes_ask : null;
+  let impliedProb = null;
+  if (yesBid != null && yesAsk != null) impliedProb = (yesBid + yesAsk) / 2 / 100;
+  else if (typeof m.last_price === 'number') impliedProb = m.last_price / 100;
+  return {
+    ticker: m.ticker || null,
+    title: m.yes_sub_title || m.subtitle || m.title || m.ticker || '',
+    floorStrike: typeof m.floor_strike === 'number' ? m.floor_strike : null,
+    capStrike: typeof m.cap_strike === 'number' ? m.cap_strike : null,
+    strikeType: m.strike_type || null,
+    impliedProb,            // 0..1, or null
+    closeTime: m.close_time || m.expiration_time || null,
+  };
+}
+
+export async function getKalshiTargets(asset = 'BTC') {
+  const key = String(asset).toUpperCase();
+  const series = KALSHI_SERIES[key];
+  if (!series) return { error: `Ativo não suportado pela Kalshi: ${asset}` };
+
+  return cached(`kalshi:${key}`, 30 * 1000, async () => {
+    try {
+      const url = `${KALSHI_API}/markets?series_ticker=${series}&status=open&limit=200`;
+      const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
+      if (!res.ok) throw new Error(`Kalshi HTTP ${res.status}`);
+      const data = await res.json();
+      const markets = Array.isArray(data.markets) ? data.markets : [];
+
+      // Keep only markets whose window closes within the next ~16 minutes —
+      // i.e. the live 15-minute window.
+      const now = Date.now();
+      const horizon = now + 16 * 60 * 1000;
+      const current = markets.filter((m) => {
+        const ct = m.close_time || m.expiration_time;
+        if (!ct) return false;
+        const t = new Date(ct).getTime();
+        return t >= now && t <= horizon;
+      });
+
+      const pool = current.length > 0 ? current : markets;
+      const targets = pool
+        .map(normalizeKalshiMarket)
+        .filter((t) => t && (t.floorStrike != null || t.capStrike != null))
+        .sort((a, b) => (a.floorStrike ?? a.capStrike ?? 0) - (b.floorStrike ?? b.capStrike ?? 0));
+
+      if (targets.length === 0) throw new Error('Nenhum mercado 15min aberto');
+
+      const closeTime = targets[0].closeTime;
+      return { asset: key, series, closeTime, count: targets.length, targets, source: 'Kalshi' };
+    } catch (err) {
+      return { error: err.message };
+    }
+  });
+}
+
 export async function getExternalIntelligence(env) {
   const [fearGreed, sentiment, onChain] = await Promise.all([
     getFearGreedIndex(),

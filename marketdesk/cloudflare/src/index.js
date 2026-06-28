@@ -5,6 +5,7 @@ import {
   getFearGreedIndex,
   getExternalIntelligence,
   getMarketNews,
+  getKalshiTargets,
 } from './connectors.js';
 
 export { MarketHub } from './websocket.js';
@@ -104,6 +105,11 @@ async function handleRequest(request, env) {
     const asset = url.searchParams.get('asset');
     const items = await getMarketNews(asset);
     return json({ items });
+  }
+
+  if (url.pathname === '/api/connectors/kalshi') {
+    const asset = url.searchParams.get('asset') || 'BTC';
+    return json(await getKalshiTargets(asset));
   }
 
   // Anything else (/, /css/*, /js/*, ...) is the static frontend bundle.

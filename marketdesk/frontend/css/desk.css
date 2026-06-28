@@ -572,6 +572,11 @@ table.history-table th, table.history-table td {
 .miss { color: var(--bear); }
 .hist-pending { color: var(--muted); font-style: italic; }
 
+/* Kalshi 15-min targets */
+.kalshi-head { margin-bottom: 6px; }
+.kalshi-hi { color: var(--bull); }
+.kalshi-lo { color: var(--bear); }
+
 /* Accuracy scoreboard (before/after hit-rate per horizon) */
 .acc-summary {
   display: flex;

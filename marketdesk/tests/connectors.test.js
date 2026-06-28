@@ -9,6 +9,7 @@ import {
   getCoinGeckoSentiment,
   getOnChainPanel,
   getExternalIntelligence,
+  getKalshiTargets,
 } from '../cloudflare/src/connectors.js';
 
 test('getFearGreedIndex returns an object with value or error (never throws)', async () => {
@@ -42,4 +43,23 @@ test('getExternalIntelligence returns the expected shape (never throws)', async 
   assert.ok('fearGreed' in result);
   assert.ok('sentiment' in result);
   assert.ok('onChain' in result);
+});
+
+test('getKalshiTargets returns targets or error (never throws)', async () => {
+  const result = await getKalshiTargets('BTC');
+  assert.ok(typeof result === 'object' && result !== null);
+  const hasTargets = Array.isArray(result.targets);
+  const hasError = typeof result.error === 'string';
+  assert.ok(hasTargets || hasError, 'Must have either targets array or error field');
+  if (hasTargets) {
+    assert.equal(result.asset, 'BTC');
+    for (const tgt of result.targets) {
+      assert.ok('ticker' in tgt && 'impliedProb' in tgt);
+    }
+  }
+});
+
+test('getKalshiTargets rejects unsupported assets gracefully', async () => {
+  const result = await getKalshiTargets('DOGE');
+  assert.ok(typeof result.error === 'string', 'Unsupported asset must return an error field');
 });

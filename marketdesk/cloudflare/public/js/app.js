@@ -228,6 +228,7 @@ async function loadHistory() {
 }
 
 async function loadAll() {
+  window.loadKalshiTargets?.(); // symbol-aware Kalshi targets (BTC/ETH only)
   await Promise.allSettled([
     loadCandles(),
     loadAnalysis(),

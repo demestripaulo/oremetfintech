@@ -59,10 +59,55 @@ async function loadNewsFeed() {
   }
 }
 
+// Kalshi 15-min targets — only BTC/ETH have these short-horizon markets.
+const KALSHI_ASSET = { BTCUSDT: 'BTC', ETHUSDT: 'ETH' };
+
+async function loadKalshiTargets() {
+  const container = document.getElementById('kalshi-container');
+  if (!container) return;
+  const asset = KALSHI_ASSET[window.activeSymbol];
+  if (!asset) {
+    container.innerHTML = `<p class="indicator-explain">${t('kalshiOnlyBtcEth')}</p>`;
+    return;
+  }
+  try {
+    const res = await fetch(`${CONNECTORS_API_BASE}/api/connectors/kalshi?asset=${asset}`);
+    const data = await res.json();
+    if (data.error || !Array.isArray(data.targets) || data.targets.length === 0) {
+      container.innerHTML = `<p class="indicator-explain">${t('kalshiUnavailable')}${data.error || ''}</p>`;
+      return;
+    }
+    const closeLabel = data.closeTime
+      ? new Date(data.closeTime).toLocaleTimeString(window.LANG === 'pt' ? 'pt-BR' : 'en-US', { hour: '2-digit', minute: '2-digit' })
+      : '';
+    const rows = data.targets.slice(0, 12).map((tgt) => {
+      const strike = tgt.floorStrike ?? tgt.capStrike;
+      const prob = tgt.impliedProb != null ? `${(tgt.impliedProb * 100).toFixed(0)}%` : '—';
+      const probClass = tgt.impliedProb != null && tgt.impliedProb >= 0.5 ? 'kalshi-hi' : 'kalshi-lo';
+      return `<tr>
+        <td class="mono">${strike != null ? '$' + Number(strike).toLocaleString() : tgt.title}</td>
+        <td class="mono ${probClass}">${prob}</td>
+      </tr>`;
+    }).join('');
+    container.innerHTML = `
+      <div class="kalshi-head indicator-explain">${t('kalshiWindow')} ${closeLabel} · ${data.count} ${t('kalshiMarkets')}</div>
+      <table class="history-table">
+        <thead><tr><th>${t('kalshiStrike')}</th><th>${t('kalshiProb')}</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    `;
+  } catch (err) {
+    container.innerHTML = `<p class="indicator-explain">${t('kalshiUnavailable')}${err.message}</p>`;
+  }
+}
+window.loadKalshiTargets = loadKalshiTargets;
+
 document.addEventListener('DOMContentLoaded', () => {
   loadIntelligencePanel();
   loadNewsFeed();
+  loadKalshiTargets();
 
   setInterval(loadIntelligencePanel, 60 * 60 * 1000);
   setInterval(loadNewsFeed, 5 * 60 * 1000);
+  setInterval(loadKalshiTargets, 30 * 1000);
 });
