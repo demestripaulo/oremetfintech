@@ -75,9 +75,9 @@ async function handleRequest(request, env) {
     const oneHour = predictRange(candles, '1h', lang);
     const daily = predictRange(candles, 'daily', lang);
     const currentPrice = candles[candles.length - 1].close;
-    // Seed the accuracy tracker (deduped by window) and resolve closed windows,
-    // so the before/after log fills even between cron ticks from live traffic.
-    await resolvePredictions(env, symbol, candles);
+    // Seed the accuracy tracker (deduped append by window) so the before/after
+    // log fills even between cron ticks. Resolution is left to the cron — a
+    // single writer — to avoid a read-modify-write race overwriting resolved rows.
     await recordPredictions(env, symbol, {
       '15min': { ...fifteenMin, priceAtGeneration: currentPrice },
       '1h': { ...oneHour, priceAtGeneration: currentPrice },
@@ -221,12 +221,20 @@ async function resolvePredictions(env, symbol, candles) {
   };
 
   const now = Date.now();
+  const newest = candles.length ? candles[candles.length - 1].close : null;
+  // After this grace period, resolve against the best price we have rather than
+  // leaving a row stuck on "pending" forever (e.g. a candle gap right at the
+  // boundary, or the boundary scrolling out of the 200-candle window).
+  const RESOLVE_GRACE_MS = 5 * 60 * 1000;
   let changed = false;
   for (const e of log) {
     if (e.status !== 'pending') continue;
     if (now < e.windowEnd) continue;
-    const actual = priceAt(Math.floor(e.windowEnd / 1000));
-    if (actual == null) continue; // candle not in range yet; resolve on a later tick
+    let actual = priceAt(Math.floor(e.windowEnd / 1000));
+    if (actual == null) {
+      if (now < e.windowEnd + RESOLVE_GRACE_MS || newest == null) continue; // retry on a later tick
+      actual = newest; // fallback: don't leave it pending indefinitely
+    }
     e.resolved_price = actual;
     e.hit = actual >= e.range_low && actual <= e.range_high;
     e.status = 'resolved';

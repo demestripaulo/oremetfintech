@@ -62,6 +62,9 @@ export class MarketHub {
 
   // Mark a symbol's tick dirty and ensure a flush is scheduled.
   scheduleFlush(symbol) {
+    // No browsers connected — don't run a perpetual timer over an empty Set.
+    // The next client connect gets the latest snapshot from lastTicks anyway.
+    if (this.clients.size === 0) return;
     this.dirtySymbols.add(symbol);
     if (this.flushTimer !== null) return;
     this.flushTimer = setTimeout(() => {
