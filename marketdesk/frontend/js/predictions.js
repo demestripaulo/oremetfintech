@@ -82,68 +82,88 @@ function fmtWindow(ms) {
   return `${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}`;
 }
 
-// Per-interval hit rate over resolved entries — the "before/after" scoreboard.
-function accuracySummary(log) {
-  const stats = {};
-  for (const e of log) {
-    if (e.status !== 'resolved') continue;
-    const s = stats[e.interval] || (stats[e.interval] = { hit: 0, total: 0 });
-    s.total += 1;
-    if (e.hit) s.hit += 1;
+const fmtUsdShort = (n) => '$' + Number(n).toLocaleString(undefined, { maximumFractionDigits: 2 });
+
+// Build display rows: 15-min windows are DIRECTIONAL (to-beat target + UP/DOWN)
+// sourced from the calibration log; 1h windows keep the range view.
+function buildHistoryRows(log, calib) {
+  const rows = [];
+  // 15-min directional rows from calibration data.
+  for (const e of calib) {
+    const toBeat = e.strike;
+    let target = '<span class="indicator-explain">—</span>';
+    let result = `<span class="hist-pending">${t('histPending')}</span>`;
+    if (toBeat != null) target = `<span class="mono">${fmtUsdShort(toBeat)}</span>`;
+    if (e.status === 'resolved' && typeof e.outcome === 'number') {
+      result = e.outcome === 1
+        ? `<span class="hit">▲ ${t('histUp')}</span>`
+        : `<span class="miss">▼ ${t('histDown')}</span>`;
+    }
+    rows.push({ ts: e.windowStart ?? 0, interval: '15m', target, result });
   }
-  const parts = Object.entries(stats).map(([interval, s]) => {
-    const pct = s.total ? Math.round((s.hit / s.total) * 100) : 0;
-    return `<span class="acc-chip"><b>${INTERVAL_LABEL[interval] || interval}</b> ${pct}% <span class="acc-frac">(${s.hit}/${s.total})</span></span>`;
-  });
-  if (parts.length === 0) return '';
+  // 1h range rows from the prediction log.
+  for (const e of log) {
+    if (e.interval !== '1h') continue;
+    const low = e.range_low, high = e.range_low != null ? e.range_high : null;
+    const range = `<span class="mono">${low?.toFixed ? low.toFixed(2) : low} — ${high?.toFixed ? high.toFixed(2) : high}</span>`;
+    let result = `<span class="hist-pending">${t('histPending')}</span>`;
+    if (e.status === 'resolved' && e.resolved_price != null) {
+      result = e.hit
+        ? `<span class="hit">✓ ${t('histHit')} (${e.resolved_price.toFixed(0)})</span>`
+        : `<span class="miss">✗ ${t('histMiss')} (${e.resolved_price.toFixed(0)})</span>`;
+    }
+    rows.push({ ts: e.windowStart ?? e.generatedAt ?? 0, interval: '1h', target: range, result });
+  }
+  return rows.sort((a, b) => b.ts - a.ts).slice(0, 40);
+}
+
+// Scoreboard: 15m = % UP (directional), 1h = range hit-rate.
+function historyScore(log, calib) {
+  const parts = [];
+  const res15 = calib.filter((e) => e.status === 'resolved' && typeof e.outcome === 'number');
+  if (res15.length) {
+    const up = res15.filter((e) => e.outcome === 1).length;
+    parts.push(`<span class="acc-chip"><b>15m</b> ${Math.round((up / res15.length) * 100)}% ${t('histUp').toLowerCase()} <span class="acc-frac">(${up}/${res15.length})</span></span>`);
+  }
+  const res1h = log.filter((e) => e.interval === '1h' && e.status === 'resolved');
+  if (res1h.length) {
+    const hit = res1h.filter((e) => e.hit).length;
+    parts.push(`<span class="acc-chip"><b>1h</b> ${Math.round((hit / res1h.length) * 100)}% <span class="acc-frac">(${hit}/${res1h.length})</span></span>`);
+  }
+  if (!parts.length) return '';
   return `<div class="acc-summary"><span class="acc-label">${t('histAccuracy')}:</span> ${parts.join('')}</div>`;
 }
 
-function renderHistory(log) {
+function renderHistory(data) {
   const container = document.getElementById('history-container');
-  if (!log || log.length === 0) {
+  // Back-compat: accept either { log, calib } or a plain log array.
+  const log = Array.isArray(data) ? data : (data?.log || []);
+  const calib = (Array.isArray(data) ? [] : (data?.calib || []));
+
+  const rows = buildHistoryRows(log, calib);
+  if (rows.length === 0) {
     container.innerHTML = `<p class="indicator-explain">${t('noHistory')}</p>`;
     return;
   }
 
-  // Newest window first.
-  const sorted = log.slice().sort((a, b) => (b.windowStart ?? b.generatedAt ?? 0) - (a.windowStart ?? a.generatedAt ?? 0));
-
-  const rows = sorted.slice(0, 40).map((e) => {
-    const win = fmtWindow(e.windowStart ?? e.generatedAt ?? Date.now());
-    const interval = INTERVAL_LABEL[e.interval] || e.interval || '15min';
-    const low = e.range_low, high = e.range_high;
-    const range = (low?.toFixed ? low.toFixed(2) : low) + ' — ' + (high?.toFixed ? high.toFixed(2) : high);
-
-    let actual = '<span class="indicator-explain">—</span>';
-    let result = `<span class="hist-pending">${t('histPending')}</span>`;
-    if (e.status === 'resolved' && e.resolved_price != null) {
-      actual = `<span class="mono">${e.resolved_price.toFixed(2)}</span>`;
-      result = e.hit
-        ? `<span class="hit">✓ ${t('histHit')}</span>`
-        : `<span class="miss">✗ ${t('histMiss')}</span>`;
-    }
-    return `<tr>
-      <td class="mono">${win}</td>
-      <td>${interval}</td>
-      <td class="mono">${range}</td>
-      <td>${actual}</td>
-      <td>${result}</td>
-    </tr>`;
-  }).join('');
+  const body = rows.map((r) => `<tr>
+      <td class="mono">${fmtWindow(r.ts || Date.now())}</td>
+      <td>${r.interval}</td>
+      <td>${r.target}</td>
+      <td>${r.result}</td>
+    </tr>`).join('');
 
   container.innerHTML = `
-    ${accuracySummary(log)}
+    ${historyScore(log, calib)}
     <div class="history-scroll">
       <table class="history-table">
         <thead><tr>
           <th>${t('histTime')}</th>
           <th>${t('histInterval')}</th>
-          <th>${t('histRange')}</th>
-          <th>${t('histActual')}</th>
+          <th>${t('histToBeat')}</th>
           <th>${t('histResult')}</th>
         </tr></thead>
-        <tbody>${rows}</tbody>
+        <tbody>${body}</tbody>
       </table>
     </div>
   `;

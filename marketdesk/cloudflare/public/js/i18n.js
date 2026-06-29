@@ -36,6 +36,7 @@ const I18N = {
     histTime: 'Window', histInterval: 'Interval',
     histRange: 'Projected Range', histResult: 'Result',
     histActual: 'Actual', histAccuracy: 'Accuracy',
+    histToBeat: 'To beat', histUp: 'UP', histDown: 'DOWN',
     histPending: 'pending', histHit: 'correct', histMiss: 'missed',
     noHistory: 'No analysis history yet.',
     // Connectors
@@ -137,6 +138,7 @@ const I18N = {
     histTime: 'Janela', histInterval: 'Intervalo',
     histRange: 'Range previsto', histResult: 'Resultado',
     histActual: 'Real', histAccuracy: 'Acerto',
+    histToBeat: 'Alvo (to beat)', histUp: 'SUBIU', histDown: 'CAIU',
     histPending: 'pendente', histHit: 'acertou', histMiss: 'errou',
     noHistory: 'Sem histórico de análises ainda.',
     // Connectors

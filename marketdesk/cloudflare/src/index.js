@@ -92,7 +92,9 @@ async function handleRequest(request, env) {
   if (url.pathname === '/api/history') {
     const symbol = url.searchParams.get('symbol') || 'BTCUSDT';
     const log = await readPredictionLog(env, symbol);
-    return json({ symbol, log });
+    const calibRaw = await env.MARKET_KV.get(`calib:${symbol}`);
+    const calib = calibRaw ? JSON.parse(calibRaw) : [];
+    return json({ symbol, log, calib });
   }
 
   // ---------- External connectors ----------

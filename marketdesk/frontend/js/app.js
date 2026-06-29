@@ -221,7 +221,7 @@ async function loadHistory() {
     const res = await fetch(`${API_BASE}/api/history?symbol=${activeSymbol}`);
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-    renderHistory(data.log);
+    renderHistory(data);
   } catch (err) {
     console.error('Failed to load history', err);
     setPanelMessage('history-container', `${t('historyUnavailable')}: ${err.message}`, 'error');
