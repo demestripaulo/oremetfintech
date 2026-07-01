@@ -1,6 +1,6 @@
 import { fetchKlines, fetch24hTicker, SYMBOLS } from './binance.js';
 import { buildIndicatorPanel } from './analysis.js';
-import { predictRange, crossKalshiTargets, modelProbForTarget, simulatePaperTrades } from './predictions.js';
+import { predictRange, crossKalshiTargets, modelProbForTarget, simulatePaperTrades, pavFit, pavApply } from './predictions.js';
 import {
   getFearGreedIndex,
   getExternalIntelligence,
@@ -264,18 +264,47 @@ function calibrationSummary(log) {
     if (xs.length === 0) return null;
     return xs.reduce((a, e) => a + (e[probKey] - e.outcome) ** 2, 0) / xs.length;
   };
-  // Hit-rate by predicted-probability bucket (market), for a reliability curve.
-  const buckets = [];
-  for (let b = 0; b < 10; b++) {
-    const lo = b / 10, hi = (b + 1) / 10;
-    const xs = resolved.filter((e) => typeof e.marketProb === 'number' && e.marketProb >= lo && e.marketProb < (hi === 1 ? 1.0001 : hi));
-    if (xs.length) buckets.push({ bucket: `${Math.round(lo * 100)}-${Math.round(hi * 100)}%`, n: xs.length, observed: round01(xs.reduce((a, e) => a + e.outcome, 0) / xs.length) });
-  }
+  // Hit-rate by predicted-probability bucket, for a reliability curve.
+  const bucketsBy = (probKey) => {
+    const out = [];
+    for (let b = 0; b < 10; b++) {
+      const lo = b / 10, hi = (b + 1) / 10;
+      const xs = resolved.filter((e) => typeof e[probKey] === 'number' && e[probKey] >= lo && e[probKey] < (hi === 1 ? 1.0001 : hi));
+      if (xs.length) out.push({ bucket: `${Math.round(lo * 100)}-${Math.round(hi * 100)}%`, lo, hi, n: xs.length, observed: round01(xs.reduce((a, e) => a + e.outcome, 0) / xs.length) });
+    }
+    return out;
+  };
+  const buckets = bucketsBy('marketProb');       // kept for back-compat
+  const modelBuckets = bucketsBy('modelProb');
+
   const modelBrier = brier('modelProb');
   const marketBrier = brier('marketProb');
   // Skill score: how much the model beats the market (>0 = better than market).
   const skill = modelBrier != null && marketBrier ? round01(1 - modelBrier / marketBrier) : null;
-  return { samples: n, modelBrier: r3(modelBrier), marketBrier: r3(marketBrier), skillVsMarket: skill, buckets };
+
+  // In-sample isotonic recalibration: map raw modelProb through the observed
+  // frequency of its own reliability bucket (pool-adjacent-violators keeps it
+  // monotonic). Shows how much of the Brier gap is fixable by recalibration
+  // alone vs. a genuine modeling problem. Not leave-one-out — illustrative only.
+  let recalModelBrier = null, recalSkillVsMarket = null;
+  const modelSamples = resolved.filter((e) => typeof e.modelProb === 'number');
+  if (modelBuckets.length >= 2 && modelSamples.length) {
+    const fit = pavFit(modelBuckets.map((b) => ({ x: (b.lo + b.hi) / 2, y: b.observed, w: b.n })));
+    const sqErr = modelSamples.reduce((a, e) => a + (pavApply(fit, e.modelProb) - e.outcome) ** 2, 0);
+    recalModelBrier = r3(sqErr / modelSamples.length);
+    recalSkillVsMarket = marketBrier ? round01(1 - recalModelBrier / marketBrier) : null;
+  }
+
+  return {
+    samples: n,
+    modelBrier: r3(modelBrier),
+    marketBrier: r3(marketBrier),
+    skillVsMarket: skill,
+    recalModelBrier,
+    recalSkillVsMarket,
+    buckets,
+    modelBuckets,
+  };
 }
 function r3(x) { return x == null ? null : Math.round(x * 1000) / 1000; }
 function round01(x) { return Math.round(x * 100) / 100; }

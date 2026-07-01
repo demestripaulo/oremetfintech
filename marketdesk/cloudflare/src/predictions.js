@@ -93,8 +93,41 @@ export function normalCdf(x) {
 // The band is heuristic, not a true CI, so this is an APPROXIMATION used only to
 // compare against the market's implied probability — never a guarantee.
 function modelSigma(prediction) {
-  const s = (prediction.range_high - prediction.range_low) / 2;
-  return s > 0 ? s : Math.max(1e-6, Math.abs(prediction.midpoint) * 0.001);
+  const base = (prediction.range_high - prediction.range_low) / 2;
+  const s = base > 0 ? base : Math.max(1e-6, Math.abs(prediction.midpoint) * 0.001);
+  // A neutral bias means the model found no directional edge — its band alone
+  // understates that uncertainty, which was overstating modelProb near 50/50
+  // markets (the bucket where most calibration error showed up). Widen sigma
+  // for neutral calls so modelProb pulls closer to 50%.
+  return prediction.bias === 'neutral' ? s * 1.6 : s;
+}
+
+// ---------- Isotonic-style recalibration (pool-adjacent-violators) ----------
+// Fits a monotonic step function mapping raw modelProb -> observed frequency,
+// from weighted (x, y, weight) points (typically reliability-bucket midpoints).
+// This is an in-sample diagnostic, not a leave-one-out estimate — treat any
+// resulting Brier improvement as illustrative upside, not a validated result.
+export function pavFit(points) {
+  const sorted = [...points].filter((p) => p.w > 0).sort((a, b) => a.x - b.x);
+  const stack = [];
+  for (const p of sorted) {
+    let block = { sumY: p.y * p.w, sumW: p.w, xMin: p.x, xMax: p.x };
+    stack.push(block);
+    while (stack.length > 1) {
+      const b2 = stack[stack.length - 1];
+      const b1 = stack[stack.length - 2];
+      if (b1.sumY / b1.sumW <= b2.sumY / b2.sumW) break;
+      stack.pop(); stack.pop();
+      stack.push({ sumY: b1.sumY + b2.sumY, sumW: b1.sumW + b2.sumW, xMin: b1.xMin, xMax: b2.xMax });
+    }
+  }
+  return stack.map((b) => ({ xMin: b.xMin, xMax: b.xMax, value: b.sumY / b.sumW }));
+}
+
+export function pavApply(fit, x) {
+  if (!fit || fit.length === 0) return x;
+  for (const b of fit) if (x <= b.xMax) return b.value;
+  return fit[fit.length - 1].value;
 }
 
 // Model-implied probability that the settlement satisfies a Kalshi target.

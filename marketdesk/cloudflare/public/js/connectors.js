@@ -99,12 +99,30 @@ function renderKalshiCalibration(c) {
   const skill = c.skillVsMarket;
   const skillTxt = skill == null ? '—' : `${skill > 0 ? '+' : ''}${(skill * 100).toFixed(0)}%`;
   const skillClass = skill != null && skill > 0 ? 'kx-agree' : 'kx-diverge';
+
+  const recal = c.recalSkillVsMarket;
+  const recalTxt = recal == null ? '—' : `${recal > 0 ? '+' : ''}${(recal * 100).toFixed(0)}%`;
+  const recalClass = recal != null && recal > 0 ? 'kx-agree' : 'kx-diverge';
+  const recalRow = c.recalModelBrier != null
+    ? `<div class="kx-recal">${t('kxCalibRecal')} <span class="mono">${fmt(c.recalModelBrier)}</span> · ${t('kxCalibRecalSkill')} <span class="${recalClass}">${recalTxt}</span> <span class="kx-paper-note">(${t('kxCalibRecalNote')})</span></div>`
+    : '';
+
+  const bars = (c.modelBuckets || []).map((b) => {
+    const predMid = Math.round((b.lo + b.hi) * 50);
+    const diff = Math.round((b.observed * 100) - predMid);
+    const diffTxt = diff === 0 ? '' : ` <span class="${diff > 0 ? 'kx-agree' : 'kx-diverge'}">(${diff > 0 ? '+' : ''}${diff}pp)</span>`;
+    return `<div class="kx-bucket-row"><span class="mono">${b.bucket}</span> <span class="acc-frac">n=${b.n}</span> → <span class="mono">${Math.round(b.observed * 100)}%</span>${diffTxt}</div>`;
+  }).join('');
+  const bucketsBlock = bars ? `<div class="kx-buckets"><div class="indicator-explain">${t('kxBucketsTitle')}</div>${bars}</div>` : '';
+
   return `
     <div class="kalshi-calib indicator-explain">
       <b>${t('kxCalibTitle')}</b> · n=${c.samples} ·
       ${t('kxCalibModel')} <span class="mono">${fmt(c.modelBrier)}</span> ·
       ${t('kxCalibMarket')} <span class="mono">${fmt(c.marketBrier)}</span> ·
       ${t('kxCalibSkill')} <span class="${skillClass}">${skillTxt}</span>
+      ${recalRow}
+      ${bucketsBlock}
     </div>`;
 }
 

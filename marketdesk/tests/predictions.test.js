@@ -3,7 +3,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { predictRange, normalCdf, modelProbForTarget, combineProb, simulatePaperTrades } from '../cloudflare/src/predictions.js';
+import { predictRange, normalCdf, modelProbForTarget, combineProb, simulatePaperTrades, pavFit, pavApply } from '../cloudflare/src/predictions.js';
 
 function makeCandle(time, open, high, low, close, volume = 100) {
   return { time, open, high, low, close, volume };
@@ -120,4 +120,25 @@ test('simulatePaperTrades returns zero trades when no edge clears threshold', ()
   const r = simulatePaperTrades([{ status: 'resolved', outcome: 0, marketProb: 0.5, modelProb: 0.52 }]);
   assert.equal(r.trades, 0);
   assert.equal(r.pnl, 0);
+});
+
+test('pavFit produces a monotonic non-decreasing mapping even from noisy points', () => {
+  const points = [
+    { x: 0.15, y: 0.30, w: 10 },
+    { x: 0.25, y: 0.10, w: 10 }, // violates monotonicity vs previous point
+    { x: 0.45, y: 0.40, w: 20 },
+    { x: 0.75, y: 0.85, w: 5 },
+  ];
+  const fit = pavFit(points);
+  let prev = -1;
+  for (const b of fit) {
+    assert.ok(b.value >= prev - 1e-9, 'pooled values must be non-decreasing');
+    prev = b.value;
+  }
+});
+
+test('pavApply maps a raw probability through the pooled step function', () => {
+  const fit = pavFit([{ x: 0.2, y: 0.2, w: 10 }, { x: 0.6, y: 0.6, w: 10 }, { x: 0.9, y: 0.9, w: 10 }]);
+  assert.ok(Math.abs(pavApply(fit, 0.2) - 0.2) < 1e-9);
+  assert.ok(Math.abs(pavApply(fit, 0.95) - 0.9) < 1e-9, 'out-of-range values clamp to the last block');
 });
